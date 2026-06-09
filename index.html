@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Parquet 1900 — Planning</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        :root{
+            --navy:#f0f4f8; --blue:#1e4080; --blue-light:#2653a8;
+            --gold:#c8a84b; --text:#1a2a3a; --muted:#7a8fa8;
+            --card:#ffffff; --card2:#f7f9fb; --border:rgba(0,0,0,.08);
+            --green:#22c55e; --radius:14px
+        }
+        html,body{min-height:100%;background:var(--navy);color:var(--text);
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+            -webkit-tap-highlight-color:transparent}
+
+        /* ══ HEADER ══ */
+        .app-header{background:var(--blue);padding:14px 16px 0;
+            border-bottom:1px solid rgba(255,255,255,.1)}
+        .hdr-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+        .hdr-logo{width:44px;height:44px;border-radius:10px;overflow:hidden;
+            background:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+        .hdr-logo img{width:44px;height:44px;object-fit:contain}
+        .hdr-logo-fb{font-size:9px;font-weight:800;color:var(--gold);text-align:center;line-height:1.1;padding:4px}
+        .hdr-titles{flex:1}
+        .hdr-title{font-size:16px;font-weight:700;color:#fff}
+        .hdr-sub{font-size:11px;color:rgba(255,255,255,.6);margin-top:1px}
+        .hdr-actions{display:flex;gap:8px}
+        .hdr-btn{width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+            background:rgba(255,255,255,.15);color:#fff;font-size:16px;
+            cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .hdr-btn:active{background:rgba(255,255,255,.25)}
+
+        .status-bar{display:flex;align-items:center;gap:6px;padding:8px 0 10px;
+            font-size:11px;color:rgba(255,255,255,.55)}
+        .status-dot{width:7px;height:7px;border-radius:50%;background:#6b7fa0;flex-shrink:0}
+        .status-dot.active{background:var(--green)}
+
+        /* ══ MONTH NAV ══ */
+        .month-nav{background:#fff;padding:10px 16px 0;
+            border-bottom:1px solid var(--border)}
+        .month-row{display:flex;align-items:center;justify-content:space-between;
+            margin-bottom:10px}
+        .month-name{font-size:20px;font-weight:700;color:var(--text)}
+        .month-year{font-size:14px;color:var(--muted);margin-left:6px}
+        .nav-btns{display:flex;gap:6px}
+        .nav-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+            background:rgba(255,255,255,.05);color:var(--text);font-size:15px;
+            cursor:pointer;display:flex;align-items:center;justify-content:center}
+        .nav-btn:active{background:rgba(255,255,255,.1)}
+        .nav-btn:disabled{opacity:.3;cursor:default}
+
+        /* Pills de mes */
+        .month-pills{display:flex;gap:6px;padding-bottom:12px;overflow-x:auto;
+            scrollbar-width:none}
+        .month-pills::-webkit-scrollbar{display:none}
+        .pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;
+            color:var(--muted);cursor:pointer;border:1px solid var(--border);
+            background:transparent;white-space:nowrap;flex-shrink:0}
+        .pill.active{background:var(--blue-light);color:#fff;border-color:var(--blue-light)}
+
+        /* ══ CALENDARIO ══ */
+        .cal-body{padding:12px 12px 0}
+        .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+        .cal-hdr{text-align:center;font-size:10px;font-weight:700;
+            color:var(--muted);padding:0 0 6px}
+        .cal-hdr.wk{color:#b0bcc8}
+
+        .day-cell{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;position:relative;cursor:default}
+        .day-cell.empty{background:transparent}
+        .day-cell.normal{background:#f0f4f8}
+        .day-cell.weekend{background:#e8ecf0}
+        .day-cell.has{background:var(--blue);cursor:pointer}
+        .day-cell.has:active{transform:scale(.92)}
+        .day-cell.today .day-num::after{content:'';position:absolute;bottom:2px;
+            left:50%;transform:translateX(-50%);width:4px;height:4px;
+            border-radius:50%;background:var(--gold)}
+        .day-num{font-size:13px;font-weight:600;line-height:1;position:relative}
+        .day-cell.weekend .day-num{color:#b0bcc8}
+        .day-cell.has .day-num{color:#fff}
+        .day-count{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);margin-top:2px}
+
+        /* ══ STATS ══ */
+        .stats-row{display:flex;gap:10px;padding:12px 12px 10px}
+        .stat-box{flex:1;background:#fff;border-radius:10px;
+            padding:10px 12px;border:1px solid var(--border)}
+        .stat-num{font-size:24px;font-weight:800;color:var(--text);line-height:1}
+        .stat-lbl{font-size:11px;color:var(--muted);margin-top:3px}
+
+        /* ══ LEYENDA ══ */
+        .legend{display:flex;align-items:center;gap:8px;padding:0 12px 16px;
+            font-size:11px;color:var(--muted)}
+        .legend-dot{width:10px;height:10px;border-radius:3px;
+            background:var(--blue);flex-shrink:0}
+
+        /* ══ PANTALLA VACÍA ══ */
+        .empty-screen{display:flex;flex-direction:column;align-items:center;
+            justify-content:center;min-height:60vh;padding:32px 24px;gap:16px;text-align:center}
+        .empty-icon{font-size:52px}
+        .empty-title{font-size:17px;font-weight:700;color:var(--text)}
+        .empty-text{font-size:13px;color:var(--muted);line-height:1.7}
+        .drop-area{width:100%;border:2px dashed rgba(255,255,255,.12);border-radius:14px;
+            padding:20px;transition:all .2s}
+        .drop-area.drag-over{border-color:var(--gold);background:rgba(200,168,75,.06)}
+        .btn-primary{background:var(--blue-light);color:#fff;border:none;border-radius:11px;
+            padding:14px;font-size:15px;font-weight:700;cursor:pointer;width:100%;
+            display:flex;align-items:center;justify-content:center;gap:8px}
+        .btn-primary:active{opacity:.85}
+
+        /* ══ SPINNER ══ */
+        .loading{display:flex;flex-direction:column;align-items:center;
+            justify-content:center;padding:60px 20px;gap:14px}
+        .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.08);
+            border-top-color:var(--gold);border-radius:50%;animation:spin .9s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .loading p{color:var(--muted);font-size:13px}
+
+        /* ══ MODAL DETALLE ══ */
+        .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
+            display:flex;align-items:flex-end;animation:fadeIn .15s}
+        @keyframes fadeIn{from{opacity:0}}
+        .bottom-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;
+            max-height:80vh;overflow-y:auto;
+            padding-bottom:max(env(safe-area-inset-bottom),20px);
+            animation:slideUp .22s ease-out}
+        @keyframes slideUp{from{transform:translateY(44px);opacity:.5}}
+        .bs-handle{width:36px;height:4px;background:rgba(0,0,0,.12);
+            border-radius:2px;margin:12px auto 0}
+        .bs-date{padding:14px 18px 0}
+        .bs-day{font-size:20px;font-weight:800;color:#1a2a3a}
+        .bs-weekday{font-size:12px;color:var(--muted);margin-top:2px}
+        .bs-close{position:absolute;right:16px;top:16px;width:30px;height:30px;
+            border-radius:50%;background:rgba(0,0,0,.07);border:none;
+            color:#1a2a3a;font-size:17px;cursor:pointer;
+            display:flex;align-items:center;justify-content:center}
+        .bs-header-wrap{position:relative}
+        .obra-cards{padding:12px 14px 8px;display:flex;flex-direction:column;gap:10px}
+        .obra-card{background:#f7f9fb;border-radius:12px;
+            padding:14px;border:1px solid var(--border)}
+        .obra-card-title{font-size:14px;font-weight:700;color:#1a2a3a;margin-bottom:10px}
+        .obra-field{display:flex;align-items:flex-start;gap:10px;margin-top:6px}
+        .obra-field-icon{width:28px;height:28px;border-radius:8px;
+            background:rgba(30,64,128,.4);display:flex;align-items:center;
+            justify-content:center;font-size:13px;flex-shrink:0}
+        .obra-field-body{flex:1}
+        .obra-field-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;
+            letter-spacing:.5px;font-weight:600}
+        .obra-field-val{font-size:13px;color:var(--text);margin-top:1px;line-height:1.3}
+        .prsto-badge{display:inline-block;background:rgba(30,64,128,.5);
+            color:#7eb3ff;border:1px solid rgba(126,179,255,.2);
+            border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;
+            margin-top:4px}
+        .team-text{color:#7ec8a0;font-size:12px}
+
+        /* ══ TOAST ══ */
+        #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+            background:#1e4080;color:#fff;padding:10px 20px;border-radius:20px;
+            font-size:13px;font-weight:600;z-index:500;
+            box-shadow:0 4px 20px rgba(0,0,0,.4);
+            border:1px solid rgba(255,255,255,.1);
+            white-space:nowrap;opacity:0;transition:opacity .3s;pointer-events:none}
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="app-header">
+    <div class="hdr-top">
+        <div class="hdr-logo">
+            <img src="logo.png" alt="P1900"
+                 onerror="this.style.display='none';this.parentElement.innerHTML='<div class=hdr-logo-fb>PARQUET<br>1900</div>'">
+        </div>
+        <div class="hdr-titles">
+            <div class="hdr-title">Planning de obras</div>
+            <div class="hdr-sub">Temporada 2026</div>
+        </div>
+        <div class="hdr-actions">
+            <button class="hdr-btn" onclick="document.getElementById('fileIn').click()" title="Subir Excel">＋</button>
+        </div>
+    </div>
+    <div class="status-bar" id="statusBar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Sin datos — sube el Excel para empezar</span>
+    </div>
+</div>
+
+<!-- Month nav -->
+<div class="month-nav" id="monthNav" style="display:none">
+    <div class="month-row">
+        <div>
+            <span class="month-name" id="monthName"></span>
+            <span class="month-year">2026</span>
+        </div>
+        <div class="nav-btns">
+            <button class="nav-btn" id="btnPrev" onclick="navMes(-1)">‹</button>
+            <button class="nav-btn" id="btnNext" onclick="navMes(+1)">›</button>
+        </div>
+    </div>
+    <div class="month-pills" id="monthPills"></div>
+</div>
+
+<div id="root"></div>
+<div id="toast"></div>
+<input id="fileIn" type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="onFile(event)">
+
+<script>
+/* ══════════════════════════════════════
+   CONFIG
+══════════════════════════════════════ */
+const YEAR = 2026;
+const TABS = [
+    {name:'Junio',      short:'Jun 26', mesIdx:5},
+    {name:'Julio',      short:'Jul 26', mesIdx:6},
+    {name:'Agosto',     short:'Ago 26', mesIdx:7},
+    {name:'Septiembre', short:'Sep 26', mesIdx:8},
+];
+const DIAS_SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
+                  'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const LS_DATA='p1900v2_data', LS_FILE='p1900v2_file', LS_DATE='p1900v2_date';
+
+/* ══════════════════════════════════════
+   ESTADO
+══════════════════════════════════════ */
+let planData  = {};
+let activeTab = 0;
+
+/* ══════════════════════════════════════
+   PARSER
+══════════════════════════════════════ */
+function norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+
+function argbDeCelda(cell){
+    if(!cell||!cell.s) return null;
+    for(const k of['fgColor','bgColor']){
+        const c=cell.s[k]; if(!c) continue;
+        if(c.argb&&c.argb.length===8) return c.argb.toUpperCase();
+        if(c.rgb&&c.rgb.length===6)   return 'FF'+c.rgb.toUpperCase();
+    }
+    return null;
+}
+function esAmarillo(a){ if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>200&&g>200&&b<80; }
+function esGris(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>150&&r<230&&Math.abs(r-g)<30&&Math.abs(g-b)<30; }
+function esRojo(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>180&&g<80&&b<80; }
+
+function parseWb(wb){
+    const res={};
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    if(!ws||!ws['!ref']) return res;
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    const enc=(r,c)=>XLSX.utils.encode_cell({r,c});
+    const val=(r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
+
+    let mesNombre='', dayMap={};
+
+    for(let r=range.s.r;r<=range.e.r;r++){
+        // Cabecera: col A con fondo gris
+        const a0=ws[enc(r,0)];
+        if(a0&&esGris(argbDeCelda(a0))){
+            // Detectar mes en col H (índice 7)
+            const colH=val(r,7);
+            const mi=MESES_ES.findIndex(m=>norm(colH).includes(m));
+            if(mi!==-1){
+                mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
+                if(!res[mesNombre]) res[mesNombre]={};
+            }
+            // Mapear columnas de día (desde índice 8)
+            dayMap={};
+            for(let c=8;c<=range.e.c;c++){
+                const cell=ws[enc(r,c)]; if(!cell) continue;
+                const n=cell.t==='n'?cell.v:parseFloat(String(cell.v||''));
+                if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayMap[c]=n;
+            }
+            continue;
+        }
+
+        if(!mesNombre||!Object.keys(dayMap).length) continue;
+
+        const nObra  = val(r,0);
+        const nPrsto = val(r,1).replace(/\n/g,' · ');
+        const cliente= val(r,6);
+        const obra   = val(r,7);
+        if(!obra&&!nObra) continue;
+
+        for(const[cStr,dayNum]of Object.entries(dayMap)){
+            const cell=ws[enc(r,parseInt(cStr))];
+            const argb=argbDeCelda(cell);
+            if(!argb||esRojo(argb)||!esAmarillo(argb)) continue;
+            const equipo=cell&&cell.v?String(cell.v).trim().replace(/\n/g,', '):'';
+            if(!res[mesNombre][dayNum]) res[mesNombre][dayNum]=[];
+            res[mesNombre][dayNum].push({nObra,nPrsto,cliente,obra,equipo});
+        }
+    }
+    return res;
+}
+
+/* ══════════════════════════════════════
+   RENDER
+══════════════════════════════════════ */
+function render(){
+    const tab  =TABS[activeTab];
+    const mData=planData[tab.name]||{};
+    const dias =new Date(YEAR,tab.mesIdx+1,0).getDate();
+    const offset=(new Date(YEAR,tab.mesIdx,1).getDay()+6)%7;
+    const hoy  =new Date();
+    const todayDay=(hoy.getFullYear()===YEAR&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
+
+    const diasConObra=Object.keys(mData).length;
+    // Obras únicas del mes (por nombre de obra, no por día)
+    const obrasUnicas=new Set(
+        Object.values(mData).flat().map(o=>o.nObra||o.obra)
+    ).size;
+
+    // Nav mes
+    document.getElementById('monthNav').style.display='';
+    document.getElementById('monthName').textContent=tab.name;
+    document.getElementById('btnPrev').disabled=(activeTab===0);
+    document.getElementById('btnNext').disabled=(activeTab===TABS.length-1);
+
+    // Pills
+    document.getElementById('monthPills').innerHTML=TABS.map((t,i)=>
+        `<div class="pill${i===activeTab?' active':''}" onclick="setTab(${i})">${t.short}</div>`
+    ).join('');
+
+    // Calendario
+    const dayNames=['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
+    let cal=`<div class="cal-body"><div class="cal-grid">`;
+    dayNames.forEach((d,i)=>{
+        cal+=`<div class="cal-hdr${i>=5?' wk':''}">${d}</div>`;
+    });
+    for(let i=0;i<offset;i++) cal+=`<div class="day-cell empty"></div>`;
+
+    for(let day=1;day<=dias;day++){
+        const obras=mData[day]||[];
+        const hasW =obras.length>0;
+        const dow  =(offset+day-1)%7;   // 0=lun … 6=dom
+        const isWk =dow>=5;
+        const isTod=day===todayDay;
+        let cls='day-cell';
+        if(hasW)       cls+=' has';
+        else if(isWk)  cls+=' weekend';
+        else           cls+=' normal';
+        if(isTod)      cls+=' today';
+        const click=hasW?`onclick="openDay(${activeTab},${day})"`:'';
+        cal+=`<div class="${cls}" ${click}>
+            <div class="day-num">${day}</div>
+            ${hasW?`<div class="day-count">${obras.length}</div>`:''}
+        </div>`;
+    }
+    cal+=`</div></div>`;
+
+    // Stats
+    const stats=`<div class="stats-row">
+        <div class="stat-box">
+            <div class="stat-num">${obrasUnicas}</div>
+            <div class="stat-lbl">Obras este mes</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-num">${diasConObra}</div>
+            <div class="stat-lbl">Días con trabajo</div>
+        </div>
+    </div>`;
+
+    const legend=`<div class="legend">
+        <div class="legend-dot"></div>
+        <span>Día con obra activa · el número indica cuántas obras</span>
+    </div>`;
+
+    document.getElementById('root').innerHTML=cal+stats+legend;
+}
+
+function setTab(i){ activeTab=i; render(); }
+function navMes(dir){
+    const n=activeTab+dir;
+    if(n>=0&&n<TABS.length){ activeTab=n; render(); }
+}
+
+/* ══════════════════════════════════════
+   MODAL DÍA
+══════════════════════════════════════ */
+function openDay(tabIdx,day){
+    const tab  =TABS[tabIdx];
+    const obras=(planData[tab.name]||{})[day]||[];
+    if(!obras.length) return;
+    const fecha =new Date(YEAR,tab.mesIdx,day);
+    const cards =obras.map(o=>`
+        <div class="obra-card">
+            <div class="obra-card-title">${esc(o.obra||'—')}</div>
+            ${o.cliente?`<div class="obra-field">
+                <div class="obra-field-icon">👤</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Cliente</div>
+                    <div class="obra-field-val">${esc(o.cliente)}</div>
+                </div>
+            </div>`:''}
+            ${o.equipo?`<div class="obra-field">
+                <div class="obra-field-icon">🔨</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Equipo</div>
+                    <div class="obra-field-val team-text">${esc(o.equipo)}</div>
+                </div>
+            </div>`:''}
+            <div class="obra-field">
+                <div class="obra-field-icon">#</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Nº Obra</div>
+                    <div class="obra-field-val">${esc(String(o.nObra||'—'))}</div>
+                </div>
+            </div>
+            ${o.nPrsto?`<div style="margin-top:8px">${
+                o.nPrsto.split(' · ').map(p=>`<span class="prsto-badge">${esc(p)}</span> `).join('')
+            }</div>`:''}
+        </div>`).join('');
+
+    const ov=document.createElement('div');
+    ov.className='overlay';
+    ov.innerHTML=`<div class="bottom-sheet">
+        <div class="bs-handle"></div>
+        <div class="bs-header-wrap">
+            <div class="bs-date">
+                <div class="bs-day">${day} de ${tab.name}</div>
+                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${YEAR}</div>
+            </div>
+            <button class="bs-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="obra-cards">${cards}</div>
+    </div>`;
+    ov.addEventListener('click',e=>{ if(e.target===ov) closeModal(); });
+    document.body.appendChild(ov);
+}
+function closeModal(){ document.querySelector('.overlay')?.remove(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ══════════════════════════════════════
+   SYNC CON SERVIDOR
+══════════════════════════════════════ */
+async function guardarEnServidor(data, filename, fecha) {
+    try {
+        await fetch('/.netlify/functions/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data, filename, fecha })
+        });
+    } catch { /* sin conexión, continuar */ }
+}
+
+async function cargarDesdeServidor() {
+    try {
+        const res = await fetch('/.netlify/functions/data');
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+/* ══════════════════════════════════════
+   CARGA ARCHIVO
+══════════════════════════════════════ */
+function onFile(evt){
+    const file=evt.target.files[0]; if(!file) return;
+    evt.target.value='';
+    document.getElementById('root').innerHTML=
+        `<div class="loading"><div class="spinner"></div><p>Procesando ${esc(file.name)}…</p></div>`;
+    document.getElementById('monthNav').style.display='none';
+
+    const reader=new FileReader();
+    reader.onload=e=>{
+        try{
+            const wb=XLSX.read(e.target.result,{type:'array',cellStyles:true});
+            const data=parseWb(wb);
+            const total=Object.values(data).reduce((s,m)=>s+Object.values(m).reduce((ss,a)=>ss+a.length,0),0);
+
+            if(total===0){
+                toast('⚠ No se reconoció el formato del Excel');
+                if(Object.keys(planData).length) render();
+                else mostrarVacio();
+                return;
+            }
+
+            planData=data;
+            const ahora=new Date().toLocaleString('es-ES',
+                {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+            // Guardar en local Y en servidor (para todos los dispositivos)
+            localStorage.setItem(LS_DATA,JSON.stringify(planData));
+            localStorage.setItem(LS_FILE,file.name);
+            localStorage.setItem(LS_DATE,ahora);
+            guardarEnServidor(planData, file.name, ahora).then(()=>{
+                toast(`✓ Datos guardados y sincronizados en todos los dispositivos`);
+            });
+
+            setStatus(true,`Planning de Excel · ${ahora}`);
+            activeTab=tabActual();
+            render();
+            toast(`✓ ${total} obras cargadas — sincronizando…`);
+        }catch(err){
+            toast('Error: '+err.message);
+            if(Object.keys(planData).length) render();
+            else mostrarVacio();
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+/* ══════════════════════════════════════
+   UTILIDADES UI
+══════════════════════════════════════ */
+function mostrarVacio(){
+    document.getElementById('monthNav').style.display='none';
+    const root=document.getElementById('root');
+    root.innerHTML=`<div class="empty-screen">
+        <div class="empty-icon">📋</div>
+        <div class="empty-title">Sin datos de planning</div>
+        <p class="empty-text">Pulsa ＋ en la cabecera o arrastra<br>el Excel aquí para empezar</p>
+        <div class="drop-area" id="dz">
+            <button class="btn-primary" onclick="document.getElementById('fileIn').click()">
+                ↑ &nbsp; Subir Excel del planning
+            </button>
+        </div>
+    </div>`;
+    const dz=document.getElementById('dz');
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+    dz.addEventListener('drop',e=>{
+        e.preventDefault();dz.classList.remove('drag-over');
+        const f=e.dataTransfer.files[0];
+        if(f){const i=document.getElementById('fileIn');const dt=new DataTransfer();dt.items.add(f);i.files=dt.files;onFile({target:i});}
+    });
+}
+
+function setStatus(active,text){
+    document.getElementById('statusDot').className='status-dot'+(active?' active':'');
+    document.getElementById('statusText').textContent=text;
+}
+
+let _tt;
+function toast(msg){
+    const el=document.getElementById('toast');
+    el.textContent=msg; el.style.opacity='1';
+    clearTimeout(_tt);
+    _tt=setTimeout(()=>{el.style.opacity='0';},3000);
+}
+
+function tabActual(){
+    const hoy=new Date();
+    const mi=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
+    return mi>=0?mi:0;
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ══════════════════════════════════════
+   INIT — primero servidor, luego local
+══════════════════════════════════════ */
+(async function(){
+    // 1. Intentar cargar desde servidor (datos compartidos entre dispositivos)
+    const servidor = await cargarDesdeServidor();
+    if(servidor && servidor.data && Object.keys(servidor.data).length){
+        planData = servidor.data;
+        // Actualizar localStorage con los datos del servidor
+        localStorage.setItem(LS_DATA, JSON.stringify(planData));
+        localStorage.setItem(LS_FILE, servidor.filename || '');
+        localStorage.setItem(LS_DATE, servidor.fecha || '');
+        setStatus(true, `Planning de Excel · ${servidor.fecha || ''}`);
+        activeTab = tabActual();
+        render();
+        return;
+    }
+
+    // 2. Fallback: localStorage (sin conexión o primer uso)
+    const d=localStorage.getItem(LS_DATA);
+    const dt=localStorage.getItem(LS_DATE);
+    if(d){
+        try{
+            planData=JSON.parse(d);
+            setStatus(true,`Planning de Excel · ${dt||''}`);
+            activeTab=tabActual();
+            render(); return;
+        }catch{}
+    }
+
+    // 3. Sin datos
+    mostrarVacio();
+})();
+</script>
+</body>
+</html>
