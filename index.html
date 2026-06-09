@@ -440,7 +440,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
 ══════════════════════════════════════ */
 async function guardarEnServidor(data, filename, fecha) {
     try {
-        await fetch('/.netlify/functions/data', {
+        await fetch('/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ data, filename, fecha })
@@ -450,7 +450,7 @@ async function guardarEnServidor(data, filename, fecha) {
 
 async function cargarDesdeServidor() {
     try {
-        const res = await fetch('/.netlify/functions/data');
+        const res = await fetch('/api/data');
         if (!res.ok) return null;
         return await res.json();
     } catch {
