@@ -13,7 +13,11 @@ export default async (req, context) => {
     }
 
     try {
-        const store = getStore({ name: "planning", consistency: "strong" });
+        const store = getStore({
+            name: "planning",
+            siteID: "29cb2bbe-383b-4ae8-b54d-8aa9fbe293cb",
+            token: process.env.NETLIFY_AUTH_TOKEN
+        });
 
         if (req.method === "GET") {
             const data = await store.get("plandata", { type: "json" });
