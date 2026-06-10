@@ -253,7 +253,8 @@ const LS_DATA='p1900v2_data', LS_FILE='p1900v2_file', LS_DATE='p1900v2_date';
 /* ══════════════════════════════════════
    ESTADO
 ══════════════════════════════════════ */
-let planData   = {};
+let planData   = {};   // datos calendario (Hoja1)
+let planList   = [];   // datos planning lista (Hoja2)
 let activeTab  = 0;
 let activeView = 'calendario'; // 'calendario' | 'planning'
 
@@ -276,54 +277,89 @@ function esGris(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=
 function esRojo(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>180&&g<80&&b<80; }
 
 function parseWb(wb){
-    const res={};
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    if(!ws||!ws['!ref']) return res;
-    const range=XLSX.utils.decode_range(ws['!ref']);
-    const enc=(r,c)=>XLSX.utils.encode_cell({r,c});
-    const val=(r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
-
-    let mesNombre='', dayMap={};
-
-    for(let r=range.s.r;r<=range.e.r;r++){
-        // Cabecera: col A con fondo gris
-        const a0=ws[enc(r,0)];
-        if(a0&&esGris(argbDeCelda(a0))){
-            // Detectar mes en col H (índice 7)
-            const colH=val(r,7);
-            const mi=MESES_ES.findIndex(m=>norm(colH).includes(m));
-            if(mi!==-1){
-                mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
-                if(!res[mesNombre]) res[mesNombre]={};
+    // ── Hoja1 → Calendario ──────────────────────────────────────
+    const calRes={};
+    const wsName1 = wb.SheetNames.find(n=>n.toLowerCase().includes('hoja1')) || wb.SheetNames[0];
+    const ws=wb.Sheets[wsName1];
+    if(ws&&ws['!ref']){
+        const range=XLSX.utils.decode_range(ws['!ref']);
+        const enc=(r,c)=>XLSX.utils.encode_cell({r,c});
+        const val=(r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
+        let mesNombre='', dayMap={};
+        for(let r=range.s.r;r<=range.e.r;r++){
+            const a0=ws[enc(r,0)];
+            if(a0&&esGris(argbDeCelda(a0))){
+                const colH=val(r,7);
+                const mi=MESES_ES.findIndex(m=>norm(colH).includes(m));
+                if(mi!==-1){
+                    mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
+                    if(!calRes[mesNombre]) calRes[mesNombre]={};
+                }
+                dayMap={};
+                for(let c=8;c<=range.e.c;c++){
+                    const cell=ws[enc(r,c)]; if(!cell) continue;
+                    const n=cell.t==='n'?cell.v:parseFloat(String(cell.v||''));
+                    if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayMap[c]=n;
+                }
+                continue;
             }
-            // Mapear columnas de día (desde índice 8)
-            dayMap={};
-            for(let c=8;c<=range.e.c;c++){
-                const cell=ws[enc(r,c)]; if(!cell) continue;
-                const n=cell.t==='n'?cell.v:parseFloat(String(cell.v||''));
-                if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayMap[c]=n;
+            if(!mesNombre||!Object.keys(dayMap).length) continue;
+            const nObra  = val(r,0);
+            const nPrsto = val(r,1).replace(/\n/g,' · ');
+            const cliente= val(r,6);
+            const obra   = val(r,7);
+            if(!obra&&!nObra) continue;
+            for(const[cStr,dayNum]of Object.entries(dayMap)){
+                const cell=ws[enc(r,parseInt(cStr))];
+                const argb=argbDeCelda(cell);
+                if(!argb||esRojo(argb)||!esAmarillo(argb)) continue;
+                const equipo=cell&&cell.v?String(cell.v).trim().replace(/\n/g,', '):'';
+                if(!calRes[mesNombre][dayNum]) calRes[mesNombre][dayNum]=[];
+                calRes[mesNombre][dayNum].push({nObra,nPrsto,cliente,obra,equipo});
             }
-            continue;
-        }
-
-        if(!mesNombre||!Object.keys(dayMap).length) continue;
-
-        const nObra  = val(r,0);
-        const nPrsto = val(r,1).replace(/\n/g,' · ');
-        const cliente= val(r,6);
-        const obra   = val(r,7);
-        if(!obra&&!nObra) continue;
-
-        for(const[cStr,dayNum]of Object.entries(dayMap)){
-            const cell=ws[enc(r,parseInt(cStr))];
-            const argb=argbDeCelda(cell);
-            if(!argb||esRojo(argb)||!esAmarillo(argb)) continue;
-            const equipo=cell&&cell.v?String(cell.v).trim().replace(/\n/g,', '):'';
-            if(!res[mesNombre][dayNum]) res[mesNombre][dayNum]=[];
-            res[mesNombre][dayNum].push({nObra,nPrsto,cliente,obra,equipo});
         }
     }
-    return res;
+
+    // ── Hoja2 → Planning lista ───────────────────────────────────
+    const listRes=[];
+    const wsName2 = wb.SheetNames.find(n=>n.toLowerCase().includes('hoja2'));
+    const ws2 = wsName2 ? wb.Sheets[wsName2] : null;
+    if(ws2&&ws2['!ref']){
+        const range2=XLSX.utils.decode_range(ws2['!ref']);
+        const enc2=(r,c)=>XLSX.utils.encode_cell({r,c});
+        const val2=(r,c)=>{ const cell=ws2[enc2(r,c)]; return cell?String(cell.v??'').trim():''; };
+        for(let r=range2.s.r+1;r<=range2.e.r;r++){ // saltar cabecera
+            const cliente  = val2(r,0);
+            const obraRaw  = val2(r,1);
+            const desc     = val2(r,2);
+            const fechaCell= ws2[enc2(r,3)];
+            if(!cliente&&!obraRaw) continue;
+            // Separar nObra y nombre: "1195 : Consejo Superior..."
+            let nObra='', obraNombre=obraRaw;
+            const m=obraRaw.match(/^(\d+)\s*[:\-]\s*(.+)$/);
+            if(m){ nObra=m[1]; obraNombre=m[2].trim(); }
+            // Fecha
+            let fechaISO='', fechaMs=Infinity;
+            if(fechaCell){
+                if(fechaCell.t==='d'||fechaCell.t==='n'){
+                    const d=fechaCell.t==='d'?fechaCell.v:new Date(Math.round((fechaCell.v-25569)*86400000));
+                    fechaISO=d instanceof Date?d.toISOString().slice(0,10):'';
+                    fechaMs=d instanceof Date?d.getTime():Infinity;
+                } else {
+                    const s=String(fechaCell.v||'').trim();
+                    if(s&&s!=='?'&&s!==''){
+                        const d=new Date(s);
+                        if(!isNaN(d)){fechaISO=d.toISOString().slice(0,10);fechaMs=d.getTime();}
+                        else{fechaISO=s;}
+                    }
+                }
+            }
+            listRes.push({cliente,nObra,obra:obraNombre,desc,fechaISO,fechaMs});
+        }
+        listRes.sort((a,b)=>a.fechaMs-b.fechaMs);
+    }
+
+    return {calData:calRes, planList:listRes};
 }
 
 /* ══════════════════════════════════════
@@ -414,50 +450,43 @@ function setView(v){
     else renderPlanning();
 }
 
-function buildPlanningList(){
-    const obras={};
-    for(const[mes,mData] of Object.entries(planData)){
-        const tab=TABS.find(t=>t.name===mes); if(!tab) continue;
-        for(const[dayStr,entries] of Object.entries(mData)){
-            const day=parseInt(dayStr);
-            for(const e of entries){
-                const key=(e.nObra||e.obra||'?')+'-'+mes;
-                if(!obras[key]||day<obras[key].primerDia){
-                    obras[key]={...e,mesNombre:mes,primerDia:day,mesIdx:tab.mesIdx};
-                }
-            }
-        }
-    }
-    return Object.values(obras).sort((a,b)=>{
-        const da=new Date(YEAR,a.mesIdx,a.primerDia);
-        const db=new Date(YEAR,b.mesIdx,b.primerDia);
-        return da-db;
-    });
-}
-
 function renderPlanning(){
-    const list=buildPlanningList();
-    if(!list.length){
-        document.getElementById('root').innerHTML=`<div class="pl-empty">No hay obras en el planning</div>`;
+    if(!planList.length){
+        document.getElementById('root').innerHTML=`<div class="pl-empty">📋<br><br>Sube el Excel para ver el planning</div>`;
         return;
     }
-    const MESES_CORTOS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     let html=`<div class="pl-list">`;
     let lastMes='';
-    for(const o of list){
-        if(o.mesNombre!==lastMes){
-            html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:6px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${o.mesNombre} ${YEAR}</div>`;
-            lastMes=o.mesNombre;
+    for(const o of planList){
+        // Agrupar por mes
+        let mesLabel='';
+        if(o.fechaISO&&o.fechaISO.length>=7){
+            const m=parseInt(o.fechaISO.slice(5,7))-1;
+            mesLabel=MESES[m]+' '+o.fechaISO.slice(0,4);
+        } else if(o.fechaISO){ mesLabel=o.fechaISO; }
+        else { mesLabel='Sin fecha'; }
+
+        if(mesLabel!==lastMes){
+            html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:8px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${mesLabel}</div>`;
+            lastMes=mesLabel;
         }
-        const fechaStr=`${String(o.primerDia).padStart(2,'0')}/${String(o.mesIdx+1).padStart(2,'0')}/${YEAR}`;
+
+        // Formatear fecha dd/mm/aaaa
+        let fechaStr='Por definir';
+        if(o.fechaISO&&o.fechaISO.match(/^\d{4}-\d{2}-\d{2}$/)){
+            const [y,mo,d]=o.fechaISO.split('-');
+            fechaStr=`${d}/${mo}/${y}`;
+        } else if(o.fechaISO&&o.fechaISO!=='?'){ fechaStr=o.fechaISO; }
+
         html+=`<div class="pl-item">
             <div class="pl-item-top">
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="pl-obra-name">${esc(o.obra||'—')}</span>
                 <span class="pl-fecha">${fechaStr}</span>
             </div>
-            ${o.cliente?`<div class="pl-cliente">👤 ${esc(o.cliente)}</div>`:''}
-            ${o.nPrsto?`<div class="pl-cliente">📄 Psto: ${esc(o.nPrsto)}</div>`:''}
+            ${o.cliente?`<div class="pl-cliente">👤 <strong>${esc(o.cliente)}</strong></div>`:''}
+            ${o.desc?`<div class="pl-desc">🔧 ${esc(o.desc)}</div>`:''}
         </div>`;
     }
     html+=`</div>`;
@@ -527,12 +556,12 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
 /* ══════════════════════════════════════
    SYNC CON SERVIDOR
 ══════════════════════════════════════ */
-async function guardarEnServidor(data, filename, fecha) {
+async function guardarEnServidor(data, filename, fecha, list=[]) {
     try {
         await fetch('/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data, filename, fecha })
+            body: JSON.stringify({ data, filename, fecha, planList: list })
         });
     } catch { /* sin conexión, continuar */ }
 }
@@ -561,32 +590,35 @@ function onFile(evt){
     reader.onload=e=>{
         try{
             const wb=XLSX.read(e.target.result,{type:'array',cellStyles:true});
-            const data=parseWb(wb);
-            const total=Object.values(data).reduce((s,m)=>s+Object.values(m).reduce((ss,a)=>ss+a.length,0),0);
+            const parsed=parseWb(wb);
+            const total=Object.values(parsed.calData).reduce((s,m)=>s+Object.values(m).reduce((ss,a)=>ss+a.length,0),0);
 
-            if(total===0){
+            if(total===0&&parsed.planList.length===0){
                 toast('⚠ No se reconoció el formato del Excel');
                 if(Object.keys(planData).length) render();
                 else mostrarVacio();
                 return;
             }
 
-            planData=data;
+            planData=parsed.calData;
+            planList=parsed.planList;
             const ahora=new Date().toLocaleString('es-ES',
                 {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
             // Guardar en local Y en servidor (para todos los dispositivos)
             localStorage.setItem(LS_DATA,JSON.stringify(planData));
+            localStorage.setItem('p1900v2_planlist',JSON.stringify(planList));
             localStorage.setItem(LS_FILE,file.name);
             localStorage.setItem(LS_DATE,ahora);
-            guardarEnServidor(planData, file.name, ahora).then(()=>{
+            guardarEnServidor(planData, file.name, ahora, planList).then(()=>{
                 toast(`✓ Datos guardados y sincronizados en todos los dispositivos`);
             });
 
             setStatus(true,`Planning de Excel · ${ahora}`);
             activeTab=tabActual();
-            render();
-            toast(`✓ ${total} obras cargadas — sincronizando…`);
+            if(activeView==='planning') renderPlanning();
+            else render();
+            toast(`✓ ${total} entradas cargadas — sincronizando…`);
         }catch(err){
             toast('Error: '+err.message);
             if(Object.keys(planData).length) render();
@@ -652,8 +684,9 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     const servidor = await cargarDesdeServidor();
     if(servidor && servidor.data && Object.keys(servidor.data).length){
         planData = servidor.data;
-        // Actualizar localStorage con los datos del servidor
+        planList = servidor.planList || [];
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
+        localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
         localStorage.setItem(LS_FILE, servidor.filename || '');
         localStorage.setItem(LS_DATE, servidor.fecha || '');
         setStatus(true, `Planning de Excel · ${servidor.fecha || ''}`);
@@ -668,6 +701,8 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     if(d){
         try{
             planData=JSON.parse(d);
+            const pl=localStorage.getItem('p1900v2_planlist');
+            if(pl) planList=JSON.parse(pl);
             setStatus(true,`Planning de Excel · ${dt||''}`);
             activeTab=tabActual();
             render(); return;
