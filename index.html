@@ -76,9 +76,8 @@
         .day-cell.weekend{background:#e8ecf0}
         .day-cell.has{background:var(--blue);cursor:pointer}
         .day-cell.has:active{transform:scale(.92)}
-        .day-cell.today .day-num::after{content:'';position:absolute;bottom:2px;
-            left:50%;transform:translateX(-50%);width:4px;height:4px;
-            border-radius:50%;background:var(--gold)}
+        .day-cell.today{box-shadow:0 0 0 2.5px var(--gold)!important;border-radius:10px}
+        .day-cell.today .day-num{color:var(--gold)!important;font-weight:800}
         .day-num{font-size:13px;font-weight:600;line-height:1;position:relative}
         .day-cell.weekend .day-num{color:#b0bcc8}
         .day-cell.has .day-num{color:#fff}
@@ -156,6 +155,26 @@
             margin-top:4px}
         .team-text{color:#7ec8a0;font-size:12px}
 
+        /* ══ MAIN TABS ══ */
+        .main-tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);padding:0 16px}
+        .main-tab{flex:1;padding:11px 0;font-size:13px;font-weight:600;color:var(--muted);
+            border:none;background:none;cursor:pointer;border-bottom:2.5px solid transparent;
+            display:flex;align-items:center;justify-content:center;gap:5px}
+        .main-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+        /* ══ PLANNING LISTA ══ */
+        .pl-list{padding:12px}
+        .pl-item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;
+            border:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+        .pl-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .pl-obra-num{background:var(--blue);color:#fff;border-radius:6px;
+            padding:3px 8px;font-size:11px;font-weight:700;flex-shrink:0}
+        .pl-obra-name{font-size:14px;font-weight:700;color:var(--text);flex:1}
+        .pl-fecha{font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0}
+        .pl-cliente{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px}
+        .pl-desc{font-size:12px;color:var(--muted);font-style:italic}
+        .pl-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
+
         /* ══ TOAST ══ */
         #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
             background:#1e4080;color:#fff;padding:10px 20px;border-radius:20px;
@@ -186,6 +205,12 @@
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">Sin datos — sube el Excel para empezar</span>
     </div>
+</div>
+
+<!-- Main tabs -->
+<div class="main-tabs" id="mainTabs" style="display:none">
+    <button class="main-tab active" id="tabCal" onclick="setView('calendario')">📅 Calendario</button>
+    <button class="main-tab" id="tabPlan" onclick="setView('planning')">📋 Planning</button>
 </div>
 
 <!-- Month nav -->
@@ -226,8 +251,9 @@ const LS_DATA='p1900v2_data', LS_FILE='p1900v2_file', LS_DATE='p1900v2_date';
 /* ══════════════════════════════════════
    ESTADO
 ══════════════════════════════════════ */
-let planData  = {};
-let activeTab = 0;
+let planData   = {};
+let activeTab  = 0;
+let activeView = 'calendario'; // 'calendario' | 'planning'
 
 /* ══════════════════════════════════════
    PARSER
@@ -315,6 +341,8 @@ function render(){
         Object.values(mData).flat().map(o=>o.nObra||o.obra)
     ).size;
 
+    // Mostrar tabs principales
+    document.getElementById('mainTabs').style.display='';
     // Nav mes
     document.getElementById('monthNav').style.display='';
     document.getElementById('monthName').textContent=tab.name;
@@ -374,6 +402,65 @@ function render(){
 }
 
 function setTab(i){ activeTab=i; render(); }
+
+function setView(v){
+    activeView=v;
+    document.getElementById('tabCal').className='main-tab'+(v==='calendario'?' active':'');
+    document.getElementById('tabPlan').className='main-tab'+(v==='planning'?' active':'');
+    document.getElementById('monthNav').style.display=(v==='calendario'?'':'none');
+    if(v==='calendario') render();
+    else renderPlanning();
+}
+
+function buildPlanningList(){
+    const obras={};
+    for(const[mes,mData] of Object.entries(planData)){
+        const tab=TABS.find(t=>t.name===mes); if(!tab) continue;
+        for(const[dayStr,entries] of Object.entries(mData)){
+            const day=parseInt(dayStr);
+            for(const e of entries){
+                const key=(e.nObra||e.obra||'?')+'-'+mes;
+                if(!obras[key]||day<obras[key].primerDia){
+                    obras[key]={...e,mesNombre:mes,primerDia:day,mesIdx:tab.mesIdx};
+                }
+            }
+        }
+    }
+    return Object.values(obras).sort((a,b)=>{
+        const da=new Date(YEAR,a.mesIdx,a.primerDia);
+        const db=new Date(YEAR,b.mesIdx,b.primerDia);
+        return da-db;
+    });
+}
+
+function renderPlanning(){
+    const list=buildPlanningList();
+    if(!list.length){
+        document.getElementById('root').innerHTML=`<div class="pl-empty">No hay obras en el planning</div>`;
+        return;
+    }
+    const MESES_CORTOS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    let html=`<div class="pl-list">`;
+    let lastMes='';
+    for(const o of list){
+        if(o.mesNombre!==lastMes){
+            html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:6px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${o.mesNombre} ${YEAR}</div>`;
+            lastMes=o.mesNombre;
+        }
+        const fechaStr=`${String(o.primerDia).padStart(2,'0')}/${String(o.mesIdx+1).padStart(2,'0')}/${YEAR}`;
+        html+=`<div class="pl-item">
+            <div class="pl-item-top">
+                ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
+                <span class="pl-obra-name">${esc(o.obra||'—')}</span>
+                <span class="pl-fecha">${fechaStr}</span>
+            </div>
+            ${o.cliente?`<div class="pl-cliente">👤 ${esc(o.cliente)}</div>`:''}
+            ${o.nPrsto?`<div class="pl-cliente">📄 Psto: ${esc(o.nPrsto)}</div>`:''}
+        </div>`;
+    }
+    html+=`</div>`;
+    document.getElementById('root').innerHTML=html;
+}
 function navMes(dir){
     const n=activeTab+dir;
     if(n>=0&&n<TABS.length){ activeTab=n; render(); }
@@ -511,6 +598,7 @@ function onFile(evt){
    UTILIDADES UI
 ══════════════════════════════════════ */
 function mostrarVacio(){
+    document.getElementById('mainTabs').style.display='none';
     document.getElementById('monthNav').style.display='none';
     const root=document.getElementById('root');
     root.innerHTML=`<div class="empty-screen">
