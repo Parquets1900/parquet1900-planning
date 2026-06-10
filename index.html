@@ -322,7 +322,7 @@ function parseWb(wb){
 
     // ── Hoja2 → Planning lista ───────────────────────────────────
     const listRes=[];
-    const wsName2 = wb.SheetNames.find(n=>n.toLowerCase().includes('hoja2'));
+    const wsName2 = wb.SheetNames.find(n=>n.toLowerCase().includes('lista')||n.toLowerCase().includes('hoja2'));
     const ws2 = wsName2 ? wb.Sheets[wsName2] : null;
     if(ws2&&ws2['!ref']){
         const range2=XLSX.utils.decode_range(ws2['!ref']);
