@@ -76,8 +76,10 @@
         .day-cell.weekend{background:#e8ecf0}
         .day-cell.has{background:var(--blue);cursor:pointer}
         .day-cell.has:active{transform:scale(.92)}
-        .day-cell.today{box-shadow:0 0 0 2.5px var(--gold)!important;border-radius:10px}
+        .day-cell.today{box-shadow:0 0 0 3px var(--gold)!important;border-radius:10px;background:#fff!important}
         .day-cell.today .day-num{color:var(--gold)!important;font-weight:800}
+        .day-cell.has.today{background:#1a3570!important;box-shadow:0 0 0 3px var(--gold)!important}
+        .day-cell.has.today .day-num{color:var(--gold)!important}
         .day-num{font-size:13px;font-weight:600;line-height:1;position:relative}
         .day-cell.weekend .day-num{color:#b0bcc8}
         .day-cell.has .day-num{color:#fff}
