@@ -290,30 +290,67 @@ function parseWb(wb){
         const range=XLSX.utils.decode_range(ws['!ref']);
         const enc=(r,c)=>XLSX.utils.encode_cell({r,c});
         const val=(r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
+
+        // Detectar columnas desde la primera cabecera gris
+        let clienteCol=3, obraCol=4, dayStart=7; // nuevas posiciones por defecto
         let mesNombre='', dayMap={};
+
         for(let r=range.s.r;r<=range.e.r;r++){
             const a0=ws[enc(r,0)];
             if(a0&&esGris(argbDeCelda(a0))){
-                const colH=val(r,7);
-                const mi=MESES_ES.findIndex(m=>norm(colH).includes(m));
-                if(mi!==-1){
-                    mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
-                    if(!calRes[mesNombre]) calRes[mesNombre]={};
-                }
+                // Detectar columnas dinámicamente desde la cabecera
                 dayMap={};
-                for(let c=8;c<=range.e.c;c++){
+                clienteCol=3; obraCol=4; // reset defaults
+                for(let c=0;c<=range.e.c;c++){
+                    const v=val(r,c).toUpperCase().replace(/\s/g,'');
+                    if(v==='CLIENTE') clienteCol=c;
+                    else if(v.startsWith('OBRA')) obraCol=c;
+                }
+                // Días: columnas con números 1-31
+                for(let c=obraCol+1;c<=range.e.c;c++){
                     const cell=ws[enc(r,c)]; if(!cell) continue;
                     const n=cell.t==='n'?cell.v:parseFloat(String(cell.v||''));
                     if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayMap[c]=n;
                 }
+                // Intentar detectar mes en la cabecera
+                for(let c=0;c<=Math.min(10,range.e.c);c++){
+                    const v=val(r,c);
+                    const mi=MESES_ES.findIndex(m=>norm(v).includes(m));
+                    if(mi!==-1){
+                        mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
+                        if(!calRes[mesNombre]) calRes[mesNombre]={};
+                        break;
+                    }
+                }
                 continue;
             }
-            if(!mesNombre||!Object.keys(dayMap).length) continue;
+            if(!Object.keys(dayMap).length) continue;
             const nObra  = val(r,0);
             const nPrsto = val(r,1).replace(/\n/g,' · ');
-            const cliente= val(r,6);
-            const obra   = val(r,7);
+            const cliente= val(r,clienteCol);
+            const obra   = val(r,obraCol);
             if(!obra&&!nObra) continue;
+
+            // Detectar mes desde columna INICIO si aún no tenemos mes
+            if(!mesNombre){
+                // Buscar col INICIO (suele ser obraCol+2)
+                for(let c=obraCol+1;c<=obraCol+3&&c<=range.e.c;c++){
+                    const cell=ws[enc(r,c)];
+                    if(!cell) continue;
+                    let d=null;
+                    if(cell.t==='d') d=cell.v;
+                    else if(cell.t==='n') d=new Date(Math.round((cell.v-25569)*86400000));
+                    else{ const s=String(cell.v||''); if(s.match(/^\d{4}-\d{2}/)) d=new Date(s); }
+                    if(d instanceof Date&&!isNaN(d)){
+                        const mi=d.getMonth();
+                        mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
+                        if(!calRes[mesNombre]) calRes[mesNombre]={};
+                        break;
+                    }
+                }
+            }
+            if(!mesNombre) continue;
+
             for(const[cStr,dayNum]of Object.entries(dayMap)){
                 const cell=ws[enc(r,parseInt(cStr))];
                 const argb=argbDeCelda(cell);
