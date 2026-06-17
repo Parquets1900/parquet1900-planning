@@ -390,9 +390,16 @@ function parseWb(wb){
                 } else {
                     const s=String(fechaCell.v||'').trim();
                     if(s&&s!=='?'&&s!==''){
-                        const d=new Date(s);
-                        if(!isNaN(d)){fechaISO=d.toISOString().slice(0,10);fechaMs=d.getTime();}
-                        else{fechaISO=s;}
+                        // Formato /MM/YYYY → guardamos como YYYY-MM
+                        const mParcial=s.match(/^\/(\d{1,2})\/(\d{4})$/);
+                        if(mParcial){
+                            const mm=mParcial[1].padStart(2,'0');
+                            fechaISO=`${mParcial[2]}-${mm}`;
+                            fechaMs=new Date(parseInt(mParcial[2]),parseInt(mParcial[1])-1,1).getTime();
+                        } else {
+                            const d=new Date(s);
+                            if(!isNaN(d)){fechaISO=d.toISOString().slice(0,10);fechaMs=d.getTime();}
+                        }
                     }
                 }
             }
@@ -503,11 +510,10 @@ function renderPlanning(){
     for(const o of planList){
         // Agrupar por mes
         let mesLabel='';
-        if(o.fechaISO&&o.fechaISO.length>=7){
+        if(o.fechaISO&&o.fechaISO.match(/^\d{4}-\d{2}/)){
             const m=parseInt(o.fechaISO.slice(5,7))-1;
-            mesLabel=MESES[m]+' '+o.fechaISO.slice(0,4);
-        } else if(o.fechaISO){ mesLabel=o.fechaISO; }
-        else { mesLabel='Sin fecha'; }
+            mesLabel=(MESES[m]||'?')+' '+o.fechaISO.slice(0,4);
+        } else { mesLabel='Sin fecha'; }
 
         if(mesLabel!==lastMes){
             html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:8px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${mesLabel}</div>`;
