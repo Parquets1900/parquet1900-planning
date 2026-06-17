@@ -383,7 +383,7 @@ function parseWb(wb){
             // Fecha
             let fechaISO='', fechaMs=Infinity;
             if(fechaCell){
-                if(fechaCell.t==='d'||fechaCell.t==='n'){
+                if(fechaCell.t==='d'||(fechaCell.t==='n'&&fechaCell.v>40000)){
                     const d=fechaCell.t==='d'?fechaCell.v:new Date(Math.round((fechaCell.v-25569)*86400000));
                     fechaISO=d instanceof Date?d.toISOString().slice(0,10):'';
                     fechaMs=d instanceof Date?d.getTime():Infinity;
