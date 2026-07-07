@@ -173,13 +173,22 @@
         .pl-list{padding:12px}
         .pl-item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;
             border:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
-        .pl-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .pl-item-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .pl-obra-num{background:var(--blue);color:#fff;border-radius:6px;
             padding:3px 8px;font-size:11px;font-weight:700;flex-shrink:0}
-        .pl-obra-name{font-size:14px;font-weight:700;color:var(--text);flex:1}
-        .pl-fecha{font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0}
+        .pl-obra-name{font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:0}
+        .pl-fecha{font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0}
         .pl-cliente{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px}
         .pl-desc{font-size:12px;color:var(--muted);font-style:italic}
+        .pl-trabajadores{font-size:11px;color:#4a6a8a;line-height:1.4}
+        .pl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+        .pl-fin-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;
+            background:#fff0f0;color:#d44;border:1px solid #fbb}
+        .status-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;flex-shrink:0}
+        .status-facturada{background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0}
+        .status-parafacturar{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+        .status-encurso{background:#fef9c3;color:#a16207;border:1px solid #fde047}
+        .status-otro{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
         .pl-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
 
         /* ══ TOAST ══ */
@@ -281,133 +290,119 @@ function esAmarillo(a){ if(!a)return false; const r=parseInt(a.slice(2,4),16),g=
 function esGris(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>150&&r<230&&Math.abs(r-g)<30&&Math.abs(g-b)<30; }
 function esRojo(a){     if(!a)return false; const r=parseInt(a.slice(2,4),16),g=parseInt(a.slice(4,6),16),b=parseInt(a.slice(6,8),16); return r>180&&g<80&&b<80; }
 
+function statusClass(e){
+    if(!e) return 'status-otro';
+    const n=norm(e);
+    if(n.includes('facturada')&&!n.includes('para')) return 'status-facturada';
+    if(n.includes('para')) return 'status-parafacturar';
+    if(n.includes('curso')) return 'status-encurso';
+    return 'status-otro';
+}
+
 function parseWb(wb){
-    // ── Hoja1 → Calendario ──────────────────────────────────────
+    // Lee SOLO de la hoja PLANNING
     const calRes={};
-    const wsName1 = wb.SheetNames.find(n=>n.toLowerCase().includes('hoja1')) || wb.SheetNames[0];
-    const ws=wb.Sheets[wsName1];
-    if(ws&&ws['!ref']){
-        const range=XLSX.utils.decode_range(ws['!ref']);
-        const enc=(r,c)=>XLSX.utils.encode_cell({r,c});
-        const val=(r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
-
-        // Detectar columnas desde la primera cabecera gris
-        let clienteCol=3, obraCol=4, dayStart=7; // nuevas posiciones por defecto
-        let mesNombre='', dayMap={};
-
-        for(let r=range.s.r;r<=range.e.r;r++){
-            const a0=ws[enc(r,0)];
-            if(a0&&esGris(argbDeCelda(a0))){
-                // Detectar columnas dinámicamente desde la cabecera
-                dayMap={};
-                clienteCol=3; obraCol=4; // reset defaults
-                for(let c=0;c<=range.e.c;c++){
-                    const v=val(r,c).toUpperCase().replace(/\s/g,'');
-                    if(v==='CLIENTE') clienteCol=c;
-                    else if(v.startsWith('OBRA')) obraCol=c;
-                }
-                // Días: columnas con números 1-31
-                for(let c=obraCol+1;c<=range.e.c;c++){
-                    const cell=ws[enc(r,c)]; if(!cell) continue;
-                    const n=cell.t==='n'?cell.v:parseFloat(String(cell.v||''));
-                    if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayMap[c]=n;
-                }
-                // Intentar detectar mes en la cabecera
-                for(let c=0;c<=Math.min(10,range.e.c);c++){
-                    const v=val(r,c);
-                    const mi=MESES_ES.findIndex(m=>norm(v).includes(m));
-                    if(mi!==-1){
-                        mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
-                        if(!calRes[mesNombre]) calRes[mesNombre]={};
-                        break;
-                    }
-                }
-                continue;
-            }
-            if(!Object.keys(dayMap).length) continue;
-            const nObra  = val(r,0);
-            const nPrsto = val(r,1).replace(/\n/g,' · ');
-            const cliente= val(r,clienteCol);
-            const obra   = val(r,obraCol);
-            if(!obra&&!nObra) continue;
-
-            // Detectar mes desde columna INICIO si aún no tenemos mes
-            if(!mesNombre){
-                // Buscar col INICIO (suele ser obraCol+2)
-                for(let c=obraCol+1;c<=obraCol+3&&c<=range.e.c;c++){
-                    const cell=ws[enc(r,c)];
-                    if(!cell) continue;
-                    let d=null;
-                    if(cell.t==='d') d=cell.v;
-                    else if(cell.t==='n') d=new Date(Math.round((cell.v-25569)*86400000));
-                    else{ const s=String(cell.v||''); if(s.match(/^\d{4}-\d{2}/)) d=new Date(s); }
-                    if(d instanceof Date&&!isNaN(d)){
-                        const mi=d.getMonth();
-                        mesNombre=MESES_ES[mi].charAt(0).toUpperCase()+MESES_ES[mi].slice(1);
-                        if(!calRes[mesNombre]) calRes[mesNombre]={};
-                        break;
-                    }
-                }
-            }
-            if(!mesNombre) continue;
-
-            for(const[cStr,dayNum]of Object.entries(dayMap)){
-                const cell=ws[enc(r,parseInt(cStr))];
-                const argb=argbDeCelda(cell);
-                if(!argb||esRojo(argb)||!esAmarillo(argb)) continue;
-                const equipo=cell&&cell.v?String(cell.v).trim().replace(/\n/g,', '):'';
-                if(!calRes[mesNombre][dayNum]) calRes[mesNombre][dayNum]=[];
-                calRes[mesNombre][dayNum].push({nObra,nPrsto,cliente,obra,equipo});
-            }
-        }
-    }
-
-    // ── Hoja2 → Planning lista ───────────────────────────────────
     const listRes=[];
-    const wsName2 = wb.SheetNames.find(n=>n.toLowerCase().includes('lista')||n.toLowerCase().includes('hoja2'));
-    const ws2 = wsName2 ? wb.Sheets[wsName2] : null;
-    if(ws2&&ws2['!ref']){
-        const range2=XLSX.utils.decode_range(ws2['!ref']);
-        const enc2=(r,c)=>XLSX.utils.encode_cell({r,c});
-        const val2=(r,c)=>{ const cell=ws2[enc2(r,c)]; return cell?String(cell.v??'').trim():''; };
-        for(let r=range2.s.r+1;r<=range2.e.r;r++){ // saltar cabecera
-            const cliente  = val2(r,0);
-            const obraRaw  = val2(r,1);
-            const desc     = val2(r,2);
-            const fechaCell= ws2[enc2(r,3)];
-            if(!cliente&&!obraRaw) continue;
-            // Separar nObra y nombre: "1195 : Consejo Superior..."
-            let nObra='', obraNombre=obraRaw;
-            const m=obraRaw.match(/^(\d+)\s*[:\-]\s*(.+)$/);
-            if(m){ nObra=m[1]; obraNombre=m[2].trim(); }
-            // Fecha
-            let fechaISO='', fechaMs=Infinity;
-            if(fechaCell){
-                if(fechaCell.t==='d'||(fechaCell.t==='n'&&fechaCell.v>40000)){
-                    const d=fechaCell.t==='d'?fechaCell.v:new Date(Math.round((fechaCell.v-25569)*86400000));
-                    fechaISO=d instanceof Date?d.toISOString().slice(0,10):'';
-                    fechaMs=d instanceof Date?d.getTime():Infinity;
-                } else {
-                    const s=String(fechaCell.v||'').trim();
-                    if(s&&s!=='?'&&s!==''){
-                        // Formato /MM/YYYY → guardamos como YYYY-MM
-                        const mParcial=s.match(/^\/(\d{1,2})\/(\d{4})$/);
-                        if(mParcial){
-                            const mm=mParcial[1].padStart(2,'0');
-                            fechaISO=`${mParcial[2]}-${mm}`;
-                            fechaMs=new Date(parseInt(mParcial[2]),parseInt(mParcial[1])-1,1).getTime();
-                        } else {
-                            const d=new Date(s);
-                            if(!isNaN(d)){fechaISO=d.toISOString().slice(0,10);fechaMs=d.getTime();}
-                        }
-                    }
-                }
+    const wsName = wb.SheetNames.find(n=>n.toUpperCase().includes('PLANNING'));
+    if(!wsName) return {calData:calRes, planList:listRes};
+    const ws = wb.Sheets[wsName];
+    if(!ws||!ws['!ref']) return {calData:calRes, planList:listRes};
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const enc   = (r,c)=>XLSX.utils.encode_cell({r,c});
+    const val   = (r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
+    const cell  = (r,c)=>ws[enc(r,c)];
+
+    let currentMes='', dayColMap={};  // col→dayNum para el mes actual
+
+    for(let r=range.s.r+1; r<=range.e.r; r++){
+        const aVal=val(r,0);
+        const bVal=val(r,1);
+
+        // Cabecera de sección: col A = nombre del mes, col B = vacío, cols J+ = números 1-31
+        const mesIdx=MESES_ES.findIndex(m=>norm(aVal)===m);
+        if(mesIdx!==-1 && !bVal){
+            currentMes=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
+            dayColMap={};
+            for(let c=9; c<=range.e.c; c++){
+                const cl=cell(r,c); if(!cl) continue;
+                const n=cl.t==='n'?cl.v:parseFloat(String(cl.v||''));
+                if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayColMap[c]=n;
             }
-            listRes.push({cliente,nObra,obra:obraNombre,desc,fechaISO,fechaMs});
+            if(!calRes[currentMes]) calRes[currentMes]={};
+            continue;
         }
-        listRes.sort((a,b)=>a.fechaMs-b.fechaMs);
+
+        if(!currentMes||!aVal) continue;
+
+        // Fila de datos
+        const cliente    = val(r,0);
+        const nObra      = val(r,1);
+        const obraFull   = val(r,2);
+        const presupuesto= val(r,3);
+        const factura    = val(r,4);
+        const desc       = val(r,5);
+        const estado     = val(r,8);
+
+        let obraNombre=obraFull;
+        const mn=obraFull.match(/^\d+\s*[:\-]\s*(.+)$/);
+        if(mn) obraNombre=mn[1].trim();
+
+        // Fecha inicio (col G, índice 6)
+        let fechaISO='', fechaMs=Infinity;
+        const fc=cell(r,6);
+        if(fc){
+            let d=null;
+            if(fc.t==='d') d=fc.v;
+            else if(fc.t==='n'&&fc.v>40000) d=new Date(Math.round((fc.v-25569)*86400000));
+            if(d instanceof Date&&!isNaN(d)){
+                fechaISO=d.toISOString().slice(0,10);
+                fechaMs=d.getTime();
+            }
+        }
+
+        // Trabajadores por día (cols J+ = índice 9+)
+        const trabajadoresPorDia={};
+        let lastDay=-1;
+        const trabajSet=new Set();
+        for(const[cStr,dayNum] of Object.entries(dayColMap)){
+            const cl=cell(r,parseInt(cStr));
+            if(!cl||!cl.v) continue;
+            const w=String(cl.v).trim();
+            if(!w) continue;
+            trabajadoresPorDia[dayNum]=w;
+            if(dayNum>lastDay) lastDay=dayNum;
+            w.split('\n').forEach(x=>{ if(x.trim()) trabajSet.add(x.trim()); });
+        }
+
+        // Fecha fin: último día con trabajadores
+        let fechaFin='';
+        if(lastDay>0){
+            const mi=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
+            if(mi>=0) fechaFin=new Date(YEAR,mi,lastDay).toISOString().slice(0,10);
+        }
+
+        const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
+
+        // Añadir al calendario
+        for(const[dayNum,workers] of Object.entries(trabajadoresPorDia)){
+            const d=parseInt(dayNum);
+            if(!calRes[currentMes][d]) calRes[currentMes][d]=[];
+            calRes[currentMes][d].push({
+                nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado,
+                equipo:workers.replace(/\n/g,', '),
+                esFin: esFin && d===lastDay
+            });
+        }
+
+        listRes.push({
+            cliente, nObra, obra:obraNombre, presupuesto, factura, desc,
+            fechaISO, fechaFin, fechaMs, estado, mes:currentMes,
+            trabajadores:[...trabajSet].join(', ')
+        });
     }
 
+    listRes.sort((a,b)=>a.fechaMs-b.fechaMs);
     return {calData:calRes, planList:listRes};
 }
 
@@ -499,42 +494,41 @@ function setView(v){
     else renderPlanning();
 }
 
+function fmtFecha(iso){
+    if(!iso||!iso.match(/^\d{4}-\d{2}-\d{2}$/)) return iso||'';
+    const[y,m,d]=iso.split('-'); return `${d}/${m}/${y}`;
+}
+
 function renderPlanning(){
     if(!planList.length){
         document.getElementById('root').innerHTML=`<div class="pl-empty">📋<br><br>Sube el Excel para ver el planning</div>`;
         return;
     }
-    const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     let html=`<div class="pl-list">`;
     let lastMes='';
     for(const o of planList){
-        // Agrupar por mes
-        let mesLabel='';
-        if(o.fechaISO&&o.fechaISO.match(/^\d{4}-\d{2}/)){
-            const m=parseInt(o.fechaISO.slice(5,7))-1;
-            mesLabel=(MESES[m]||'?')+' '+o.fechaISO.slice(0,4);
-        } else { mesLabel='Sin fecha'; }
-
+        const mesLabel=o.mes||'Sin fecha';
         if(mesLabel!==lastMes){
             html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:8px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${mesLabel}</div>`;
             lastMes=mesLabel;
         }
-
-        // Formatear fecha dd/mm/aaaa
-        let fechaStr='Por definir';
-        if(o.fechaISO&&o.fechaISO.match(/^\d{4}-\d{2}-\d{2}$/)){
-            const [y,mo,d]=o.fechaISO.split('-');
-            fechaStr=`${d}/${mo}/${y}`;
-        } else if(o.fechaISO&&o.fechaISO!=='?'){ fechaStr=o.fechaISO; }
-
+        const sc=statusClass(o.estado);
+        const esFin=o.estado&&(norm(o.estado).includes('facturada')||norm(o.estado).includes('para'));
         html+=`<div class="pl-item">
             <div class="pl-item-top">
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="pl-obra-name">${esc(o.obra||'—')}</span>
-                <span class="pl-fecha">${fechaStr}</span>
+                ${o.estado?`<span class="status-badge ${sc}">${esc(o.estado)}</span>`:''}
             </div>
             ${o.cliente?`<div class="pl-cliente">👤 <strong>${esc(o.cliente)}</strong></div>`:''}
             ${o.desc?`<div class="pl-desc">🔧 ${esc(o.desc)}</div>`:''}
+            <div class="pl-row">
+                ${o.fechaISO?`<span class="pl-fecha">Inicio: ${fmtFecha(o.fechaISO)}</span>`:''}
+                ${o.fechaFin?`<span class="pl-fecha">Fin: ${fmtFecha(o.fechaFin)}${esFin?' ✓':''}</span>`:''}
+            </div>
+            ${o.presupuesto?`<div style="font-size:11px;color:var(--muted)">📄 Presto: ${esc(o.presupuesto)}</div>`:''}
+            ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 Fra: ${esc(o.factura)}</div>`:''}
+            ${o.trabajadores?`<div class="pl-trabajadores">👷 ${esc(o.trabajadores)}</div>`:''}
         </div>`;
     }
     html+=`</div>`;
@@ -555,7 +549,12 @@ function openDay(tabIdx,day){
     const fecha =new Date(YEAR,tab.mesIdx,day);
     const cards =obras.map(o=>`
         <div class="obra-card">
-            <div class="obra-card-title">${esc(o.obra||'—')}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
+                <span class="obra-card-title" style="margin:0;flex:1">${esc(o.obra||'—')}</span>
+                ${o.estado?`<span class="status-badge ${statusClass(o.estado)}">${esc(o.estado)}</span>`:''}
+                ${o.esFin?`<span class="pl-fin-badge">FIN</span>`:''}
+            </div>
             ${o.cliente?`<div class="obra-field">
                 <div class="obra-field-icon">👤</div>
                 <div class="obra-field-body">
@@ -570,16 +569,27 @@ function openDay(tabIdx,day){
                     <div class="obra-field-val team-text">${esc(o.equipo)}</div>
                 </div>
             </div>`:''}
-            <div class="obra-field">
-                <div class="obra-field-icon">#</div>
+            ${o.desc?`<div class="obra-field">
+                <div class="obra-field-icon">📝</div>
                 <div class="obra-field-body">
-                    <div class="obra-field-lbl">Nº Obra</div>
-                    <div class="obra-field-val">${esc(String(o.nObra||'—'))}</div>
+                    <div class="obra-field-lbl">Descripción</div>
+                    <div class="obra-field-val">${esc(o.desc)}</div>
                 </div>
-            </div>
-            ${o.nPrsto?`<div style="margin-top:8px">${
-                o.nPrsto.split(' · ').map(p=>`<span class="prsto-badge">${esc(p)}</span> `).join('')
-            }</div>`:''}
+            </div>`:''}
+            ${o.presupuesto?`<div class="obra-field">
+                <div class="obra-field-icon">📄</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Presupuesto</div>
+                    <div class="obra-field-val" style="font-size:11px">${esc(o.presupuesto)}</div>
+                </div>
+            </div>`:''}
+            ${o.factura?`<div class="obra-field">
+                <div class="obra-field-icon">🧾</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Factura</div>
+                    <div class="obra-field-val" style="font-size:11px">${esc(o.factura)}</div>
+                </div>
+            </div>`:''}
         </div>`).join('');
 
     const ov=document.createElement('div');
