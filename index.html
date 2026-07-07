@@ -384,7 +384,7 @@ function parseWb(wb){
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
 
-        // Añadir al calendario
+        // Añadir al calendario: días con trabajadores
         for(const[dayNum,workers] of Object.entries(trabajadoresPorDia)){
             const d=parseInt(dayNum);
             if(!calRes[currentMes][d]) calRes[currentMes][d]=[];
@@ -393,6 +393,24 @@ function parseWb(wb){
                 equipo:workers.replace(/\n/g,', '),
                 esFin: esFin && d===lastDay
             });
+        }
+
+        // Si la fecha inicio cae en este mes y ese día no tiene ya esta obra, añadirla
+        if(fechaISO){
+            const mesIdx=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
+            const fechaD=new Date(fechaISO);
+            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===YEAR){
+                const inicioDay=fechaD.getDate();
+                if(!calRes[currentMes][inicioDay]) calRes[currentMes][inicioDay]=[];
+                const yaEsta=calRes[currentMes][inicioDay].some(x=>x.nObra===nObra&&x.cliente===cliente);
+                if(!yaEsta){
+                    calRes[currentMes][inicioDay].push({
+                        nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado,
+                        equipo:'', esInicio:true,
+                        esFin: esFin && inicioDay===lastDay
+                    });
+                }
+            }
         }
 
         listRes.push({
@@ -553,6 +571,7 @@ function openDay(tabIdx,day){
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="obra-card-title" style="margin:0;flex:1">${esc(o.obra||'—')}</span>
                 ${o.estado?`<span class="status-badge ${statusClass(o.estado)}">${esc(o.estado)}</span>`:''}
+                ${o.esInicio?`<span class="pl-fin-badge" style="background:#e0f2fe;color:#0369a1;border-color:#7dd3fc">INICIO</span>`:''}
                 ${o.esFin?`<span class="pl-fin-badge">FIN</span>`:''}
             </div>
             ${o.cliente?`<div class="obra-field">
