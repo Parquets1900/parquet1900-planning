@@ -314,21 +314,37 @@ function parseWb(wb){
 
     const range = XLSX.utils.decode_range(ws['!ref']);
     const enc   = (r,c)=>XLSX.utils.encode_cell({r,c});
-    const val   = (r,c)=>{ const cell=ws[enc(r,c)]; return cell?String(cell.v??'').trim():''; };
+    const val   = (r,c)=>{ const cl=ws[enc(r,c)]; return cl?String(cl.v??'').trim():''; };
     const cell  = (r,c)=>ws[enc(r,c)];
 
-    let currentMes='', dayColMap={};  // col→dayNum para el mes actual
+    // Detectar columnas desde la fila cabecera (fila 0)
+    let cCliente=0,cNObra=1,cObra=2,cPresup=3,cFra=4,cDesc=5,cFecha=6,cEstado=8,cDayStart=9;
+    for(let c=0;c<=Math.min(range.e.c,20);c++){
+        const h=norm(val(range.s.r,c));
+        if(h==='cliente') cCliente=c;
+        else if(h==='n obra'||h==='nobra'||h==='n.obra') cNObra=c;
+        else if(h==='obra') cObra=c;
+        else if(h.includes('presup')) cPresup=c;
+        else if(h.includes('factura')&&!h.includes('comment')&&!h.includes('estado')) cFra=c;
+        else if(h.includes('desc')) cDesc=c;
+        else if(h==='fecha') cFecha=c;
+        else if(h.includes('coment')||h.includes('estado')) cEstado=c;
+    }
+    // Columnas de días empiezan después del comentario
+    cDayStart=cEstado+1;
+
+    let currentMes='', dayColMap={};
 
     for(let r=range.s.r+1; r<=range.e.r; r++){
-        const aVal=val(r,0);
-        const bVal=val(r,1);
+        const aVal=val(r,cCliente);
+        const bVal=val(r,cNObra);
 
-        // Cabecera de sección: col A = nombre del mes, col B = vacío, cols J+ = números 1-31
+        // Cabecera de sección: col A = nombre del mes, col B = vacío, cols de días = números 1-31
         const mesIdx=MESES_ES.findIndex(m=>norm(aVal)===m);
         if(mesIdx!==-1 && !bVal){
             currentMes=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
             dayColMap={};
-            for(let c=9; c<=range.e.c; c++){
+            for(let c=cDayStart; c<=range.e.c; c++){
                 const cl=cell(r,c); if(!cl) continue;
                 const n=cl.t==='n'?cl.v:parseFloat(String(cl.v||''));
                 if(!isNaN(n)&&n>=1&&n<=31&&Number.isInteger(n)) dayColMap[c]=n;
@@ -340,13 +356,13 @@ function parseWb(wb){
         if(!currentMes||!aVal) continue;
 
         // Fila de datos
-        const cliente    = val(r,0);
-        const nObra      = val(r,1);
-        const obraFull   = val(r,2);
-        const presupuesto= val(r,3);
-        const factura    = val(r,4);
-        const desc       = val(r,5);
-        const estado     = val(r,8);
+        const cliente    = val(r,cCliente);
+        const nObra      = val(r,cNObra);
+        const obraFull   = val(r,cObra);
+        const presupuesto= val(r,cPresup);
+        const factura    = val(r,cFra);
+        const desc       = val(r,cDesc);
+        const estado     = val(r,cEstado);
 
         let obraNombre=obraFull;
         const mn=obraFull.match(/^\d+\s*[:\-]\s*(.+)$/);
