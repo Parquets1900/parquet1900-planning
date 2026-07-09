@@ -318,7 +318,7 @@ function parseWb(wb){
     const cell  = (r,c)=>ws[enc(r,c)];
 
     // Detectar columnas desde la fila cabecera (fila 0)
-    let cCliente=0,cNObra=1,cObra=2,cPresup=3,cFra=4,cDesc=5,cFecha=6,cEstado=8,cDayStart=9;
+    let cCliente=0,cNObra=1,cObra=2,cPresup=3,cFra=4,cDesc=5,cFecha=6,cEstado=-1,cDayStart=9;
     for(let c=0;c<=Math.min(range.e.c,20);c++){
         const h=norm(val(range.s.r,c));
         if(h==='cliente') cCliente=c;
@@ -330,7 +330,17 @@ function parseWb(wb){
         else if(h==='fecha') cFecha=c;
         else if(h.includes('coment')||h.includes('estado')) cEstado=c;
     }
-    // Columnas de días empiezan después del comentario
+    // Si no detectamos el estado por cabecera, buscarlo escaneando las primeras filas de datos
+    if(cEstado===-1){
+        const ESTADOS=['facturada','para facturar','en curso','sin cargo'];
+        outer: for(let r=range.s.r+1;r<=Math.min(range.s.r+20,range.e.r);r++){
+            for(let c=0;c<=Math.min(range.e.c,15);c++){
+                const v=norm(val(r,c));
+                if(ESTADOS.some(e=>v===e||v.startsWith(e.slice(0,5)))){ cEstado=c; break outer; }
+            }
+        }
+    }
+    if(cEstado===-1) cEstado=8; // fallback
     cDayStart=cEstado+1;
 
     let currentMes='', dayColMap={};
