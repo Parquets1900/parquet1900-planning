@@ -379,7 +379,7 @@ function parseWb(wb){
         let fechaFin='';
         if(lastDay>0){
             const mi=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
-            if(mi>=0) fechaFin=new Date(YEAR,mi,lastDay).toISOString().slice(0,10);
+            if(mi>=0){ const fd=new Date(YEAR,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
         }
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
@@ -420,7 +420,12 @@ function parseWb(wb){
         });
     }
 
-    listRes.sort((a,b)=>a.fechaMs-b.fechaMs);
+    listRes.sort((a,b)=>{
+        const ma=MESES_ES.findIndex(m=>(a.mes||'').toLowerCase().startsWith(m));
+        const mb=MESES_ES.findIndex(m=>(b.mes||'').toLowerCase().startsWith(m));
+        if(ma!==mb) return ma-mb;
+        return a.fechaMs-b.fechaMs;
+    });
     return {calData:calRes, planList:listRes};
 }
 
