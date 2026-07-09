@@ -81,6 +81,10 @@
         .day-cell.weekend{background:#e8ecf0}
         .day-cell.has{background:var(--blue);cursor:pointer}
         .day-cell.has:active{transform:scale(.92)}
+        .day-cell.inicio-only{background:#dbeafe;border:2px solid #93c5fd;cursor:pointer}
+        .day-cell.inicio-only:active{transform:scale(.92)}
+        .day-cell.inicio-only .day-num{color:#1d4ed8}
+        .day-cell.inicio-only .day-count{color:#1d4ed8;font-size:9px}
         .day-cell.today{box-shadow:0 0 0 3px var(--gold)!important;border-radius:10px;background:#fff!important}
         .day-cell.today .day-num{color:var(--gold)!important;font-weight:800}
         .day-cell.has.today{background:#1a3570!important;box-shadow:0 0 0 3px var(--gold)!important}
@@ -470,18 +474,21 @@ function render(){
     for(let day=1;day<=dias;day++){
         const obras=mData[day]||[];
         const hasW =obras.length>0;
-        const dow  =(offset+day-1)%7;   // 0=lun … 6=dom
+        const soloInicio=hasW&&obras.every(o=>o.esInicio);
+        const dow  =(offset+day-1)%7;
         const isWk =dow>=5;
         const isTod=day===todayDay;
         let cls='day-cell';
-        if(hasW)       cls+=' has';
-        else if(isWk)  cls+=' weekend';
-        else           cls+=' normal';
-        if(isTod)      cls+=' today';
+        if(hasW&&!soloInicio) cls+=' has';
+        else if(soloInicio)   cls+=' inicio-only';
+        else if(isWk)         cls+=' weekend';
+        else                  cls+=' normal';
+        if(isTod)             cls+=' today';
         const click=hasW?`onclick="openDay(${activeTab},${day})"`:'';
+        const label=soloInicio?'►':'';
         cal+=`<div class="${cls}" ${click}>
             <div class="day-num">${day}</div>
-            ${hasW?`<div class="day-count">${obras.length}</div>`:''}
+            ${hasW?`<div class="day-count">${soloInicio?label:obras.length}</div>`:''}
         </div>`;
     }
     cal+=`</div></div>`;
@@ -541,16 +548,17 @@ function renderPlanning(){
             <div class="pl-item-top">
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="pl-obra-name">${esc(o.obra||'—')}</span>
-                ${o.estado?`<span class="status-badge ${sc}">${esc(o.estado)}</span>`:''}
             </div>
             ${o.cliente?`<div class="pl-cliente">👤 <strong>${esc(o.cliente)}</strong></div>`:''}
             ${o.desc?`<div class="pl-desc">🔧 ${esc(o.desc)}</div>`:''}
-            <div class="pl-row">
-                ${o.fechaISO?`<span class="pl-fecha">Inicio: ${fmtFecha(o.fechaISO)}</span>`:''}
+            <div class="pl-row" style="margin-top:4px">
+                ${o.estado?`<span class="status-badge ${sc}">${esc(o.estado)}</span>`:''}
+                ${o.fechaISO&&!o.trabajadores?`<span style="font-size:11px;font-weight:700;color:#1d4ed8">▶ Inicio: ${fmtFecha(o.fechaISO)}</span>`:''}
+                ${o.fechaISO&&o.trabajadores?`<span class="pl-fecha">Inicio: ${fmtFecha(o.fechaISO)}</span>`:''}
                 ${o.fechaFin?`<span class="pl-fecha">Fin: ${fmtFecha(o.fechaFin)}${esFin?' ✓':''}</span>`:''}
             </div>
-            ${o.presupuesto?`<div style="font-size:11px;color:var(--muted)">📄 Presto: ${esc(o.presupuesto)}</div>`:''}
-            ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 Fra: ${esc(o.factura)}</div>`:''}
+            ${o.presupuesto?`<div style="font-size:11px;color:var(--muted)">📄 ${esc(o.presupuesto)}</div>`:''}
+            ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 ${esc(o.factura)}</div>`:''}
             ${o.trabajadores?`<div class="pl-trabajadores">👷 ${esc(o.trabajadores)}</div>`:''}
         </div>`;
     }
