@@ -173,6 +173,30 @@
             display:flex;align-items:center;justify-content:center;gap:5px}
         .main-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 
+        /* ══ PLANNING BÚSQUEDA Y FILTROS ══ */
+        .pl-toolbar{padding:10px 12px 0;display:flex;flex-direction:column;gap:8px;
+            background:var(--navy);position:sticky;top:0;z-index:10}
+        .pl-search{display:flex;align-items:center;gap:8px;background:#fff;
+            border-radius:10px;padding:8px 12px;border:1px solid var(--border)}
+        .pl-search input{flex:1;border:none;outline:none;font-size:14px;color:var(--text);
+            background:transparent}
+        .pl-search input::placeholder{color:var(--muted)}
+        .pl-search-icon{color:var(--muted);font-size:15px;flex-shrink:0}
+        .pl-filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:8px}
+        .pl-filters::-webkit-scrollbar{display:none}
+        .pl-chip{padding:5px 11px;border-radius:20px;font-size:11px;font-weight:600;
+            color:var(--muted);cursor:pointer;border:1px solid var(--border);
+            background:#fff;white-space:nowrap;flex-shrink:0;transition:all .15s}
+        .pl-chip.active{color:#fff;border-color:transparent}
+        .pl-chip.active.chip-all{background:var(--blue-light)}
+        .pl-chip.active.chip-facturada{background:#16a34a}
+        .pl-chip.active.chip-parafacturar{background:#dc2626}
+        .pl-chip.active.chip-encurso{background:#a16207}
+        .pl-chip.active.chip-noiniciado{background:#6366f1}
+        .pl-chip.active.chip-mes{background:var(--blue)}
+        .pl-empty-search{text-align:center;padding:32px 20px;color:var(--muted);font-size:14px}
+        .pl-count{font-size:11px;color:var(--muted);padding:4px 12px 0}
+
         /* ══ PLANNING LISTA ══ */
         .pl-list{padding:12px}
         .pl-item{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;
@@ -271,10 +295,13 @@ const LS_DATA='p1900v2_data', LS_FILE='p1900v2_file', LS_DATE='p1900v2_date';
 /* ══════════════════════════════════════
    ESTADO
 ══════════════════════════════════════ */
-let planData   = {};   // datos calendario (Hoja1)
-let planList   = [];   // datos planning lista (Hoja2)
+let planData   = {};
+let planList   = [];
 let activeTab  = 0;
-let activeView = 'calendario'; // 'calendario' | 'planning'
+let activeView = 'calendario';
+let plSearch   = '';
+let plFiltroEstado = 'all';  // 'all'|'facturada'|'parafacturar'|'encurso'|'noiniciado'
+let plFiltroMes    = 'all';
 
 /* ══════════════════════════════════════
    PARSER
@@ -560,17 +587,25 @@ function renderPlanning(){
         document.getElementById('root').innerHTML=`<div class="pl-empty">📋<br><br>Sube el Excel para ver el planning</div>`;
         return;
     }
-    let html=`<div class="pl-list">`;
+    const mesesDisp=[...new Set(planList.map(o=>o.mes).filter(Boolean))];
+    const chipEstado=(key,label,cls)=>`<div class="pl-chip ${cls}" id="chip-e-${key}" onclick="setPlFiltroEstado('${key}')">${label}</div>`;
+    const chipMes=(mes,key)=>`<div class="pl-chip chip-mes" id="chip-m-${key}" onclick="setPlFiltroMes('${key}')">${mes}</div>`;
+
+    // Render items — cada uno con data-attrs para filtrar sin tocar el DOM
+    let itemsHtml='';
     let lastMes='';
-    for(const o of planList){
+    planList.forEach((o,i)=>{
         const mesLabel=o.mes||'Sin fecha';
-        if(mesLabel!==lastMes){
-            html+=`<div style="font-size:12px;font-weight:700;color:var(--muted);padding:8px 2px 4px;text-transform:uppercase;letter-spacing:.5px">${mesLabel}</div>`;
-            lastMes=mesLabel;
-        }
         const sc=statusClass(o.estado);
         const esFin=o.estado&&(norm(o.estado).includes('facturada')||norm(o.estado).includes('para'));
-        html+=`<div class="pl-item">
+        const haystack=norm([o.obra,o.cliente,o.nObra,o.presupuesto,o.factura,o.desc,o.trabajadores].join(' '));
+        const enNorm=norm(o.estado||'');
+        itemsHtml+=`<div class="pl-item" data-idx="${i}" data-mes="${esc(mesLabel)}"
+            data-hay="${esc(haystack)}"
+            data-estado-f="${enNorm.includes('facturada')&&!enNorm.includes('para')?'1':'0'}"
+            data-estado-p="${enNorm.includes('para')?'1':'0'}"
+            data-estado-c="${enNorm.includes('curso')?'1':'0'}"
+            data-noiniciado="${o.trabajadores?'0':'1'}">
             <div class="pl-item-top">
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="pl-obra-name">${esc(o.obra||'—')}</span>
@@ -587,10 +622,64 @@ function renderPlanning(){
             ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 ${esc(o.factura)}</div>`:''}
             ${o.trabajadores?`<div class="pl-trabajadores">👷 ${esc(o.trabajadores)}</div>`:''}
         </div>`;
-    }
-    html+=`</div>`;
-    document.getElementById('root').innerHTML=html;
+    });
+
+    document.getElementById('root').innerHTML=`
+        <div class="pl-toolbar">
+            <div class="pl-search">
+                <span class="pl-search-icon">🔍</span>
+                <input id="pl-input" type="text" placeholder="Buscar obra, cliente, nº…"
+                    autocomplete="off" oninput="plSearch=this.value;applyPlFiltros()">
+                <span id="pl-clear" style="cursor:pointer;color:var(--muted);font-size:18px;display:none"
+                    onclick="plSearch='';document.getElementById('pl-input').value='';applyPlFiltros()">×</span>
+            </div>
+            <div class="pl-filters">
+                ${chipEstado('all','Todos','chip-all')}
+                ${chipEstado('facturada','✓ Facturada','chip-facturada')}
+                ${chipEstado('parafacturar','🔴 Para Facturar','chip-parafacturar')}
+                ${chipEstado('encurso','🟡 En Curso','chip-encurso')}
+                ${chipEstado('noiniciado','🔵 Sin iniciar','chip-noiniciado')}
+                <div style="width:1px;background:var(--border);flex-shrink:0;margin:0 2px"></div>
+                ${chipMes('Todos los meses','all')}
+                ${mesesDisp.map(m=>chipMes(m,m)).join('')}
+            </div>
+        </div>
+        <div class="pl-count" id="pl-count"></div>
+        <div class="pl-list" id="pl-results">${itemsHtml}</div>`;
+
+    applyPlFiltros();
 }
+
+function applyPlFiltros(){
+    const clr=document.getElementById('pl-clear');
+    if(clr) clr.style.display=plSearch?'':'none';
+
+    // Actualizar chips activos
+    document.querySelectorAll('.pl-chip').forEach(c=>c.classList.remove('active'));
+    const ce=document.getElementById(`chip-e-${plFiltroEstado}`);
+    const cm=document.getElementById(`chip-m-${plFiltroMes}`);
+    if(ce) ce.classList.add('active');
+    if(cm) cm.classList.add('active');
+
+    const q=norm(plSearch);
+    let visible=0;
+    document.querySelectorAll('#pl-results .pl-item').forEach(el=>{
+        let show=true;
+        if(q && !el.dataset.hay.includes(q)) show=false;
+        if(show && plFiltroMes!=='all' && el.dataset.mes!==plFiltroMes) show=false;
+        if(show && plFiltroEstado==='facturada'    && el.dataset.estadoF!=='1') show=false;
+        if(show && plFiltroEstado==='parafacturar' && el.dataset.estadoP!=='1') show=false;
+        if(show && plFiltroEstado==='encurso'      && el.dataset.estadoC!=='1') show=false;
+        if(show && plFiltroEstado==='noiniciado'   && el.dataset.noiniciado!=='1') show=false;
+        el.style.display=show?'':'none';
+        if(show) visible++;
+    });
+    const cnt=document.getElementById('pl-count');
+    if(cnt) cnt.textContent=`${visible} obra${visible!==1?'s':''}`;
+}
+
+function setPlFiltroEstado(v){ plFiltroEstado=v; applyPlFiltros(); }
+function setPlFiltroMes(v){ plFiltroMes=v; applyPlFiltros(); }
 function navMes(dir){
     const n=activeTab+dir;
     if(n>=0&&n<TABS.length){ activeTab=n; render(); }
