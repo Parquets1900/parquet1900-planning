@@ -339,13 +339,27 @@ function parseWb(wb){
     const ws = wb.Sheets[wsName];
     if(!ws||!ws['!ref']) return {calData:calRes, planList:listRes};
 
+    // Leer hoja Flota: matricula -> nombre del vehiculo (filas 11-17, cols A-B, 0-indexado)
+    const flotaMap={};
+    const wsFlota = wb.SheetNames.find(n=>n.toUpperCase().includes('FLOTA'));
+    if(wsFlota && wb.Sheets[wsFlota]){
+        const wf=wb.Sheets[wsFlota];
+        const rf=XLSX.utils.decode_range(wf['!ref']);
+        const vf=(r,c)=>{ const cl=wf[XLSX.utils.encode_cell({r,c})]; return cl?String(cl.v??'').trim():''; };
+        for(let r=11; r<=Math.min(17,rf.e.r); r++){
+            const mat=vf(r,0).replace(/\s/g,'').toUpperCase();
+            const nom=vf(r,1);
+            if(mat&&nom) flotaMap[mat]=nom;
+        }
+    }
+
     const range = XLSX.utils.decode_range(ws['!ref']);
     const enc   = (r,c)=>XLSX.utils.encode_cell({r,c});
     const val   = (r,c)=>{ const cl=ws[enc(r,c)]; return cl?String(cl.v??'').trim():''; };
     const cell  = (r,c)=>ws[enc(r,c)];
 
     // Detectar columnas desde la fila cabecera (fila 0)
-    let cCliente=0,cNObra=1,cObra=2,cPresup=3,cFra=4,cDesc=5,cFecha=6,cEstado=-1,cDayStart=9;
+    let cCliente=0,cNObra=1,cObra=2,cPresup=3,cFra=4,cDesc=5,cFecha=6,cEstado=-1,cEmpresa=-1,cDayStart=9;
     for(let c=0;c<=Math.min(range.e.c,20);c++){
         const h=norm(val(range.s.r,c));
         if(h==='cliente') cCliente=c;
@@ -355,6 +369,7 @@ function parseWb(wb){
         else if(h.includes('factura')&&!h.includes('comment')&&!h.includes('estado')) cFra=c;
         else if(h.includes('desc')) cDesc=c;
         else if(h==='fecha') cFecha=c;
+        else if(h.includes('empresa')) cEmpresa=c;
         else if(h.includes('coment')||h.includes('estado')) cEstado=c;
     }
     // Si no detectamos el estado por cabecera, buscarlo escaneando las primeras filas de datos
@@ -418,18 +433,41 @@ function parseWb(wb){
             }
         }
 
-        // Trabajadores por día (cols J+ = índice 9+)
+        // Empresa (col J o la detectada)
+        const empresa = cEmpresa>=0 ? val(r,cEmpresa) : '';
+
+        // Trabajadores y vehículos por día
         const trabajadoresPorDia={};
+        const vehiculosPorDia={};
         let lastDay=-1;
         const trabajSet=new Set();
+        const VREG=/^\s*V:\s*([^>]+?)\s*>\s*([^(\n]+?)\s*(?:\(([^)]*)\))?\s*$/i;
         for(const[cStr,dayNum] of Object.entries(dayColMap)){
             const cl=cell(r,parseInt(cStr));
             if(!cl||!cl.v) continue;
-            const w=String(cl.v).trim();
-            if(!w) continue;
-            trabajadoresPorDia[dayNum]=w;
-            if(dayNum>lastDay) lastDay=dayNum;
-            w.split('\n').forEach(x=>{ if(x.trim()) trabajSet.add(x.trim()); });
+            const raw=String(cl.v).trim();
+            if(!raw) continue;
+            const lines=raw.split('\n');
+            const workerLines=[], vehLines=[];
+            lines.forEach(ln=>{
+                const m=ln.match(VREG);
+                if(m){
+                    const mat=m[1].replace(/\s/g,'').toUpperCase();
+                    const conductor=m[2].trim();
+                    const turno=(m[3]||'').trim();
+                    const nombre=flotaMap[mat]||(mat==='PROPIO'?'Coche propio':mat);
+                    vehLines.push({mat,nombre,conductor,turno});
+                } else {
+                    if(ln.trim()) workerLines.push(ln.trim());
+                }
+            });
+            const wStr=workerLines.join('\n');
+            if(wStr||vehLines.length){
+                trabajadoresPorDia[dayNum]=wStr;
+                vehiculosPorDia[dayNum]=vehLines;
+                if(dayNum>lastDay) lastDay=dayNum;
+                workerLines.forEach(x=>{ if(x) trabajSet.add(x); });
+            }
         }
 
         // Fecha fin: último día con trabajadores
@@ -441,13 +479,14 @@ function parseWb(wb){
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
 
-        // Añadir al calendario: días con trabajadores
-        for(const[dayNum,workers] of Object.entries(trabajadoresPorDia)){
-            const d=parseInt(dayNum);
+        // Añadir al calendario: días con trabajadores o vehículos
+        const allDays=new Set([...Object.keys(trabajadoresPorDia),...Object.keys(vehiculosPorDia)].map(Number));
+        for(const d of allDays){
             if(!calRes[currentMes][d]) calRes[currentMes][d]=[];
             calRes[currentMes][d].push({
-                nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado,
-                equipo:workers.replace(/\n/g,', '),
+                nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado, empresa,
+                equipo:(trabajadoresPorDia[d]||'').replace(/\n/g,', '),
+                vehiculos:vehiculosPorDia[d]||[],
                 esFin: esFin && d===lastDay
             });
         }
@@ -462,8 +501,8 @@ function parseWb(wb){
                 const yaEsta=calRes[currentMes][inicioDay].some(x=>x.nObra===nObra&&x.cliente===cliente);
                 if(!yaEsta){
                     calRes[currentMes][inicioDay].push({
-                        nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado,
-                        equipo:'', esInicio:true,
+                        nObra, cliente, obra:obraNombre, presupuesto, factura, desc, estado, empresa,
+                        equipo:'', vehiculos:[], esInicio:true,
                         esFin: esFin && inicioDay===lastDay
                     });
                 }
@@ -473,6 +512,7 @@ function parseWb(wb){
         listRes.push({
             cliente, nObra, obra:obraNombre, presupuesto, factura, desc,
             fechaISO, fechaFin, fechaMs, estado, mes:currentMes,
+            empresa,
             trabajadores:[...trabajSet].join(', ')
         });
     }
@@ -598,7 +638,7 @@ function renderPlanning(){
         const mesLabel=o.mes||'Sin fecha';
         const sc=statusClass(o.estado);
         const esFin=o.estado&&(norm(o.estado).includes('facturada')||norm(o.estado).includes('para'));
-        const haystack=norm([o.obra,o.cliente,o.nObra,o.presupuesto,o.factura,o.desc,o.trabajadores].join(' '));
+        const haystack=norm([o.obra,o.cliente,o.nObra,o.presupuesto,o.factura,o.desc,o.empresa,o.trabajadores].join(' '));
         const enNorm=norm(o.estado||'');
         itemsHtml+=`<div class="pl-item" data-idx="${i}" data-mes="${esc(mesLabel)}"
             data-hay="${esc(haystack)}"
@@ -620,7 +660,7 @@ function renderPlanning(){
             </div>
             ${o.presupuesto?`<div style="font-size:11px;color:var(--muted)">📄 ${esc(o.presupuesto)}</div>`:''}
             ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 ${esc(o.factura)}</div>`:''}
-            ${o.trabajadores?`<div class="pl-trabajadores">👷 ${esc(o.trabajadores)}</div>`:''}
+            ${o.empresa?`<div class="pl-trabajadores">🏢 ${esc(o.empresa)}</div>`:''}
         </div>`;
     });
 
@@ -707,6 +747,20 @@ function openDay(tabIdx,day){
                 <div class="obra-field-body">
                     <div class="obra-field-lbl">Cliente</div>
                     <div class="obra-field-val">${esc(o.cliente)}</div>
+                </div>
+            </div>`:''}
+            ${o.empresa?`<div class="obra-field">
+                <div class="obra-field-icon">🏢</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Empresa</div>
+                    <div class="obra-field-val">${esc(o.empresa)}</div>
+                </div>
+            </div>`:''}
+            ${o.vehiculos&&o.vehiculos.length?`<div class="obra-field">
+                <div class="obra-field-icon">🚐</div>
+                <div class="obra-field-body">
+                    <div class="obra-field-lbl">Vehículo${o.vehiculos.length>1?'s':''}</div>
+                    <div class="obra-field-val">${o.vehiculos.map(v=>`${esc(v.nombre)}${v.mat!==v.nombre&&v.mat!=='PROPIO'?' ('+esc(v.mat)+')':''} — ${esc(v.conductor)}${v.turno?' ('+esc(v.turno)+')':''}`).join('<br>')}</div>
                 </div>
             </div>`:''}
             ${o.equipo?`<div class="obra-field">
