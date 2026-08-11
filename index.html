@@ -938,9 +938,13 @@ function toast(msg){
 }
 
 function rebuildTabs(){
-    const mesesConDatos=new Set(Object.keys(planData));
+    const mesesConDatos=new Set(
+        Object.entries(planData)
+            .filter(([,dias])=>Object.keys(dias).length>0)
+            .map(([mes])=>mes)
+    );
     TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
-    if(!TABS.length) TABS=ALL_TABS; // fallback si no hay datos aún
+    if(!TABS.length) TABS=ALL_TABS;
 }
 
 function tabActual(){
