@@ -281,7 +281,7 @@
    CONFIG
 ══════════════════════════════════════ */
 const YEAR = 2026;
-const TABS = [
+const ALL_TABS = [
     {name:'Enero',      short:'Ene 26', mesIdx:0},
     {name:'Febrero',    short:'Feb 26', mesIdx:1},
     {name:'Marzo',      short:'Mar 26', mesIdx:2},
@@ -294,6 +294,8 @@ const TABS = [
     {name:'Octubre',    short:'Oct 26', mesIdx:9},
     {name:'Noviembre',  short:'Nov 26', mesIdx:10},
     {name:'Diciembre',  short:'Dic 26', mesIdx:11},
+];
+let TABS = ALL_TABS; // se filtra en rebuildTabs() tras cargar datos
 ];
 const DIAS_SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
@@ -869,6 +871,7 @@ function onFile(evt){
 
             planData=parsed.calData;
             planList=parsed.planList;
+            rebuildTabs();
             const ahora=new Date().toLocaleString('es-ES',
                 {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
@@ -935,6 +938,12 @@ function toast(msg){
     _tt=setTimeout(()=>{el.style.opacity='0';},3000);
 }
 
+function rebuildTabs(){
+    const mesesConDatos=new Set(Object.keys(planData));
+    TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
+    if(!TABS.length) TABS=ALL_TABS; // fallback si no hay datos aún
+}
+
 function tabActual(){
     const hoy=new Date();
     const mi=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
@@ -952,6 +961,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     if(servidor && servidor.data && Object.keys(servidor.data).length){
         planData = servidor.data;
         planList = servidor.planList || [];
+        rebuildTabs();
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
         localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
         localStorage.setItem(LS_FILE, servidor.filename || '');
@@ -970,6 +980,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
             planData=JSON.parse(d);
             const pl=localStorage.getItem('p1900v2_planlist');
             if(pl) planList=JSON.parse(pl);
+            rebuildTabs();
             setStatus(true,`Planning de Excel · ${dt||''}`);
             activeTab=tabActual();
             render(); return;
