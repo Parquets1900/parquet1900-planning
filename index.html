@@ -281,26 +281,10 @@
    CONFIG
 ══════════════════════════════════════ */
 let YEAR = new Date().getFullYear();
-const NOMBRES_MES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-function buildAllTabs(y){
-    const yy=String(y).slice(2);
-    return [
-        {name:'Enero',      short:`Ene ${yy}`, mesIdx:0},
-        {name:'Febrero',    short:`Feb ${yy}`, mesIdx:1},
-        {name:'Marzo',      short:`Mar ${yy}`, mesIdx:2},
-        {name:'Abril',      short:`Abr ${yy}`, mesIdx:3},
-        {name:'Mayo',       short:`May ${yy}`, mesIdx:4},
-        {name:'Junio',      short:`Jun ${yy}`, mesIdx:5},
-        {name:'Julio',      short:`Jul ${yy}`, mesIdx:6},
-        {name:'Agosto',     short:`Ago ${yy}`, mesIdx:7},
-        {name:'Septiembre', short:`Sep ${yy}`, mesIdx:8},
-        {name:'Octubre',    short:`Oct ${yy}`, mesIdx:9},
-        {name:'Noviembre',  short:`Nov ${yy}`, mesIdx:10},
-        {name:'Diciembre',  short:`Dic ${yy}`, mesIdx:11},
-    ];
-}
-let ALL_TABS = buildAllTabs(YEAR);
-let TABS = ALL_TABS;
+const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_SHORT   = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+let ALL_TABS = [];
+let TABS = [];
 const DIAS_SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -399,20 +383,18 @@ function parseWb(wb){
     if(cEstado===-1) cEstado=8; // fallback
     cDayStart=cEstado+1;
 
-    // Detectar el año del Excel escaneando la columna de fecha
+    // Detectar año base del Excel (primera fecha válida)
+    let baseYear=new Date().getFullYear();
     for(let r=range.s.r+1; r<=Math.min(range.s.r+50,range.e.r); r++){
         const fc=ws[enc(r,cFecha)];
         if(!fc) continue;
         let d=null;
         if(fc.t==='d') d=fc.v;
         else if(fc.t==='n'&&fc.v>40000) d=new Date(Math.round((fc.v-25569)*86400000));
-        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){
-            YEAR=d.getFullYear(); break;
-        }
+        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){ baseYear=d.getFullYear(); break; }
     }
-    ALL_TABS=buildAllTabs(YEAR);
 
-    let currentMes='', dayColMap={};
+    let currentMes='', currentYear=baseYear, prevMesIdx=-1, dayColMap={};
 
     for(let r=range.s.r+1; r<=range.e.r; r++){
         const aVal=val(r,cCliente);
@@ -421,7 +403,10 @@ function parseWb(wb){
         // Cabecera de sección: col A = nombre del mes, col B = vacío, cols de días = números 1-31
         const mesIdx=MESES_ES.findIndex(m=>norm(aVal)===m);
         if(mesIdx!==-1 && !bVal){
-            currentMes=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
+            if(prevMesIdx!==-1 && mesIdx<=prevMesIdx) currentYear++; // nueva vuelta de año
+            prevMesIdx=mesIdx;
+            const mesNom=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
+            currentMes=`${mesNom} ${currentYear}`;
             dayColMap={};
             for(let c=cDayStart; c<=range.e.c; c++){
                 const cl=cell(r,c); if(!cl) continue;
@@ -501,7 +486,7 @@ function parseWb(wb){
         let fechaFin='';
         if(lastDay>0){
             const mi=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
-            if(mi>=0){ const fd=new Date(YEAR,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
+            if(mi>=0){ const fd=new Date(currentYear,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
         }
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
@@ -522,7 +507,7 @@ function parseWb(wb){
         if(fechaISO){
             const mesIdx=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
             const fechaD=new Date(fechaISO);
-            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===YEAR){
+            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===currentYear){
                 const inicioDay=fechaD.getDate();
                 if(!calRes[currentMes][inicioDay]) calRes[currentMes][inicioDay]=[];
                 const yaEsta=calRes[currentMes][inicioDay].some(x=>x.nObra===nObra&&x.cliente===cliente);
@@ -538,13 +523,14 @@ function parseWb(wb){
 
         listRes.push({
             cliente, nObra, obra:obraNombre, presupuesto, factura, desc,
-            fechaISO, fechaFin, fechaMs, estado, mes:currentMes,
+            fechaISO, fechaFin, fechaMs, estado, mes:currentMes, year:currentYear,
             empresa,
             trabajadores:[...trabajSet].join(', ')
         });
     }
 
     listRes.sort((a,b)=>{
+        if(a.year!==b.year) return a.year-b.year;
         const ma=MESES_ES.findIndex(m=>(a.mes||'').toLowerCase().startsWith(m));
         const mb=MESES_ES.findIndex(m=>(b.mes||'').toLowerCase().startsWith(m));
         if(ma!==mb) return ma-mb;
@@ -558,11 +544,14 @@ function parseWb(wb){
 ══════════════════════════════════════ */
 function render(){
     const tab  =TABS[activeTab];
+    if(!tab) return;
+    const tabYear=tab.year||YEAR;
     const mData=planData[tab.name]||{};
-    const dias =new Date(YEAR,tab.mesIdx+1,0).getDate();
-    const offset=(new Date(YEAR,tab.mesIdx,1).getDay()+6)%7;
+    const dias =new Date(tabYear,tab.mesIdx+1,0).getDate();
+    const offset=(new Date(tabYear,tab.mesIdx,1).getDay()+6)%7;
     const hoy  =new Date();
-    const todayDay=(hoy.getFullYear()===YEAR&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
+    const todayDay=(hoy.getFullYear()===tabYear&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
+    const my=document.getElementById('monthYear'); if(my) my.textContent=tabYear;
 
     const diasConObra=Object.keys(mData).length;
     // Obras únicas del mes (por nombre de obra, no por día)
@@ -759,7 +748,7 @@ function openDay(tabIdx,day){
     const tab  =TABS[tabIdx];
     const obras=(planData[tab.name]||{})[day]||[];
     if(!obras.length) return;
-    const fecha =new Date(YEAR,tab.mesIdx,day);
+    const fecha =new Date(tab.year||YEAR,tab.mesIdx,day);
     const cards =obras.map(o=>`
         <div class="obra-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -827,7 +816,7 @@ function openDay(tabIdx,day){
         <div class="bs-header-wrap">
             <div class="bs-date">
                 <div class="bs-day">${day} de ${tab.name}</div>
-                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${YEAR}</div>
+                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${fecha.getFullYear()}</div>
             </div>
             <button class="bs-close" onclick="closeModal()">×</button>
         </div>
@@ -956,28 +945,35 @@ function toast(msg){
 }
 
 function rebuildTabs(){
-    // Detectar año desde planList (fechaISO) si no viene del parseWb
-    if(planList&&planList.length){
-        const anyFecha=planList.find(o=>o.fechaISO&&o.fechaISO.length>=4);
-        if(anyFecha){ const y=parseInt(anyFecha.fechaISO.slice(0,4)); if(y>2000){ YEAR=y; ALL_TABS=buildAllTabs(YEAR); } }
+    // Construir tabs desde claves "Mes Año" del calData con datos reales
+    const entries=Object.entries(planData).filter(([,dias])=>Object.keys(dias).length>0);
+    ALL_TABS=[];
+    for(const[key] of entries){
+        const parts=key.split(' '); // "Junio 2026"
+        if(parts.length<2) continue;
+        const mesNom=parts[0], yr=parseInt(parts[parts.length-1]);
+        const mesIdx=MESES_NOMBRES.indexOf(mesNom);
+        if(mesIdx<0||isNaN(yr)) continue;
+        const yy=String(yr).slice(2);
+        ALL_TABS.push({name:key, short:`${MESES_SHORT[mesIdx]} ${yy}`, mesIdx, year:yr});
     }
-    const mesesConDatos=new Set(
-        Object.entries(planData)
-            .filter(([,dias])=>Object.keys(dias).length>0)
-            .map(([mes])=>mes)
-    );
-    TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
-    if(!TABS.length) TABS=ALL_TABS;
+    ALL_TABS.sort((a,b)=>a.year!==b.year?a.year-b.year:a.mesIdx-b.mesIdx);
+    TABS=ALL_TABS.length?ALL_TABS:[{name:'—',short:'—',mesIdx:0,year:new Date().getFullYear()}];
+
+    // Año para el header: el primer año con datos
+    YEAR=TABS[0]?.year||new Date().getFullYear();
     const hdr=document.getElementById('hdrSub');
-    if(hdr) hdr.textContent=`Temporada ${YEAR}`;
+    if(hdr) hdr.textContent=TABS.length?`Temporada ${TABS[0].year}–${TABS[TABS.length-1].year}`.replace(/(\d{4})–\1/,'$1'):'Planning';
     const my=document.getElementById('monthYear');
-    if(my) my.textContent=YEAR;
+    if(my) my.textContent=TABS[activeTab]?.year||YEAR;
 }
 
 function tabActual(){
     const hoy=new Date();
-    const mi=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
-    return mi>=0?mi:0;
+    const mi=TABS.findIndex(t=>t.year===hoy.getFullYear()&&t.mesIdx>=hoy.getMonth());
+    if(mi>=0) return mi;
+    const mi2=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
+    return mi2>=0?mi2:0;
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
