@@ -239,7 +239,7 @@
         </div>
         <div class="hdr-titles">
             <div class="hdr-title">Planning de obras</div>
-            <div class="hdr-sub">Temporada 2026</div>
+            <div class="hdr-sub" id="hdrSub">Temporada 2026</div>
         </div>
         <div class="hdr-actions">
             <button class="hdr-btn" onclick="document.getElementById('fileIn').click()" title="Subir Excel">＋</button>
@@ -262,7 +262,7 @@
     <div class="month-row">
         <div>
             <span class="month-name" id="monthName"></span>
-            <span class="month-year">2026</span>
+            <span class="month-year" id="monthYear">2026</span>
         </div>
         <div class="nav-btns">
             <button class="nav-btn" id="btnPrev" onclick="navMes(-1)">‹</button>
@@ -280,22 +280,27 @@
 /* ══════════════════════════════════════
    CONFIG
 ══════════════════════════════════════ */
-const YEAR = 2026;
-const ALL_TABS = [
-    {name:'Enero',      short:'Ene 26', mesIdx:0},
-    {name:'Febrero',    short:'Feb 26', mesIdx:1},
-    {name:'Marzo',      short:'Mar 26', mesIdx:2},
-    {name:'Abril',      short:'Abr 26', mesIdx:3},
-    {name:'Mayo',       short:'May 26', mesIdx:4},
-    {name:'Junio',      short:'Jun 26', mesIdx:5},
-    {name:'Julio',      short:'Jul 26', mesIdx:6},
-    {name:'Agosto',     short:'Ago 26', mesIdx:7},
-    {name:'Septiembre', short:'Sep 26', mesIdx:8},
-    {name:'Octubre',    short:'Oct 26', mesIdx:9},
-    {name:'Noviembre',  short:'Nov 26', mesIdx:10},
-    {name:'Diciembre',  short:'Dic 26', mesIdx:11},
-];
-let TABS = ALL_TABS; // se filtra en rebuildTabs() tras cargar datos
+let YEAR = new Date().getFullYear();
+const NOMBRES_MES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function buildAllTabs(y){
+    const yy=String(y).slice(2);
+    return [
+        {name:'Enero',      short:`Ene ${yy}`, mesIdx:0},
+        {name:'Febrero',    short:`Feb ${yy}`, mesIdx:1},
+        {name:'Marzo',      short:`Mar ${yy}`, mesIdx:2},
+        {name:'Abril',      short:`Abr ${yy}`, mesIdx:3},
+        {name:'Mayo',       short:`May ${yy}`, mesIdx:4},
+        {name:'Junio',      short:`Jun ${yy}`, mesIdx:5},
+        {name:'Julio',      short:`Jul ${yy}`, mesIdx:6},
+        {name:'Agosto',     short:`Ago ${yy}`, mesIdx:7},
+        {name:'Septiembre', short:`Sep ${yy}`, mesIdx:8},
+        {name:'Octubre',    short:`Oct ${yy}`, mesIdx:9},
+        {name:'Noviembre',  short:`Nov ${yy}`, mesIdx:10},
+        {name:'Diciembre',  short:`Dic ${yy}`, mesIdx:11},
+    ];
+}
+let ALL_TABS = buildAllTabs(YEAR);
+let TABS = ALL_TABS;
 const DIAS_SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -393,6 +398,19 @@ function parseWb(wb){
     }
     if(cEstado===-1) cEstado=8; // fallback
     cDayStart=cEstado+1;
+
+    // Detectar el año del Excel escaneando la columna de fecha
+    for(let r=range.s.r+1; r<=Math.min(range.s.r+50,range.e.r); r++){
+        const fc=ws[enc(r,cFecha)];
+        if(!fc) continue;
+        let d=null;
+        if(fc.t==='d') d=fc.v;
+        else if(fc.t==='n'&&fc.v>40000) d=new Date(Math.round((fc.v-25569)*86400000));
+        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){
+            YEAR=d.getFullYear(); break;
+        }
+    }
+    ALL_TABS=buildAllTabs(YEAR);
 
     let currentMes='', dayColMap={};
 
@@ -945,6 +963,10 @@ function rebuildTabs(){
     );
     TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
     if(!TABS.length) TABS=ALL_TABS;
+    const hdr=document.getElementById('hdrSub');
+    if(hdr) hdr.textContent=`Temporada ${YEAR}`;
+    const my=document.getElementById('monthYear');
+    if(my) my.textContent=YEAR;
 }
 
 function tabActual(){
