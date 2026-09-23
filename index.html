@@ -956,6 +956,11 @@ function toast(msg){
 }
 
 function rebuildTabs(){
+    // Detectar año desde planList (fechaISO) si no viene del parseWb
+    if(planList&&planList.length){
+        const anyFecha=planList.find(o=>o.fechaISO&&o.fechaISO.length>=4);
+        if(anyFecha){ const y=parseInt(anyFecha.fechaISO.slice(0,4)); if(y>2000){ YEAR=y; ALL_TABS=buildAllTabs(YEAR); } }
+    }
     const mesesConDatos=new Set(
         Object.entries(planData)
             .filter(([,dias])=>Object.keys(dias).length>0)
