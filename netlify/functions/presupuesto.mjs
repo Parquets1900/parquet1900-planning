@@ -26,9 +26,20 @@ export default async (req, context) => {
     try {
         const store = getPresStore();
 
-        // GET ?list=1  → list of keys
+        // GET ?list=1  → all keys
         if (req.method === "GET" && url.searchParams.get("list") === "1") {
             const result = await store.list();
+            const keys = result.blobs.map(b => b.key);
+            return new Response(JSON.stringify(keys), {
+                status: 200,
+                headers: { ...corsHeaders, "Content-Type": "application/json" }
+            });
+        }
+
+        // GET ?prefix=PRSTO/2026/000261  → keys matching prefix
+        if (req.method === "GET" && url.searchParams.get("prefix")) {
+            const prefix = url.searchParams.get("prefix");
+            const result = await store.list({ prefix });
             const keys = result.blobs.map(b => b.key);
             return new Response(JSON.stringify(keys), {
                 status: 200,

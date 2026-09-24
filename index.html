@@ -1131,6 +1131,13 @@ async function listPresServer(){
         return await r.json();
     }catch(e){ return []; }
 }
+async function searchPresServer(prefix){
+    try{
+        const r=await fetch('/api/presupuesto?prefix='+encodeURIComponent(prefix));
+        if(!r.ok) return [];
+        return await r.json();
+    }catch(e){ return []; }
+}
 async function getPresServer(num){
     try{
         const r=await fetch('/api/presupuesto?num='+encodeURIComponent(num));
@@ -1139,7 +1146,6 @@ async function getPresServer(num){
     }catch(e){ return null; }
 }
 async function savePresServer(num,buf){
-    // Convierte ArrayBuffer a base64
     const bytes=new Uint8Array(buf);
     let b64='';
     for(let i=0;i<bytes.length;i+=8192){
@@ -1159,10 +1165,30 @@ async function delPresServer(num){
     }catch(e){}
 }
 
-// Lista combinada: servidor + caché local (unión, sin duplicados)
+// Lista combinada: servidor + caché local
 async function listPresAll(){
     const [srv,local]=await Promise.all([listPresServer(),listPresDB()]);
     return [...new Set([...srv,...local])].sort();
+}
+
+// Busca por prefijo: PRSTO/2026/000261 → todas las claves que empiecen por ese número
+async function getPresByPrefix(prefix){
+    const [srvKeys,localKeys]=await Promise.all([
+        searchPresServer(prefix),
+        listPresDB()
+    ]);
+    const filtered=localKeys.filter(k=>k===prefix||k.startsWith(prefix+' ')||k.startsWith(prefix+'/'));
+    return [...new Set([...srvKeys,...filtered])].sort();
+}
+
+// Obtiene un PDF: caché local primero, luego servidor
+async function getPresLocal(key){
+    let buf=await getPresDB(key);
+    if(!buf){
+        buf=await getPresServer(key);
+        if(buf) await savePresDB(key,buf);
+    }
+    return buf;
 }
 
 function extraerNumPres(filename){
@@ -1170,6 +1196,14 @@ function extraerNumPres(filename){
     const m=filename.match(/([A-Z]{2,}[_\/]\d{4}[_\/]\d+)/i);
     if(m) return m[1].replace(/_/g,'/').toUpperCase();
     return filename.replace(/\.pdf$/i,'');
+}
+
+function filenameToKey(filename){
+    // PRSTO_2026_000261 AJUNTAMENT DE GIRONA.pdf → PRSTO/2026/000261 AJUNTAMENT DE GIRONA
+    const base=filename.replace(/\.pdf$/i,'').trim();
+    return base.replace(/^([A-Za-z]{2,})_(\d{4})_(\d+(?:[._]\d+)?)/,
+        (_,a,b,c)=>`${a.toUpperCase()}/${b}/${c.replace(/[_.]/g,'/')}`
+    );
 }
 
 async function onPdfFile(evt, prefilledNum){
@@ -1180,26 +1214,25 @@ async function onPdfFile(evt, prefilledNum){
 
     for(const file of files){
         const autoNum=prefilledNum||extraerNumPres(file.name);
-        // Si el nombre tiene patrón reconocible, sube sin preguntar
         const tienePatron=/[A-Z]{2,}\/\d{4}\/\d+/.test(autoNum);
-        if(tienePatron){
-            const key=autoNum.trim().toUpperCase();
+        if(tienePatron && !prefilledNum){
+            // Usa el nombre completo como clave para no sobreescribir otros con el mismo número
+            const key=filenameToKey(file.name);
             try{
                 const buf=await file.arrayBuffer();
                 await Promise.all([savePresDB(key,buf), savePresServer(key,buf)]);
                 ok++;
             }catch(e){ err++; }
         } else {
-            sinDetectar.push(file);
+            sinDetectar.push({file, prefill: prefilledNum});
         }
     }
 
     if(ok>0) toast(`✓ ${ok} presupuesto${ok>1?'s':''} subido${ok>1?'s':''} y sincronizados`);
     if(err>0) toast(`⚠️ ${err} error${err>1?'s':''} al subir`);
 
-    // Los que no tienen patrón: preguntar uno a uno
-    for(const file of sinDetectar){
-        const sugerido=extraerNumPres(file.name);
+    for(const {file, prefill} of sinDetectar){
+        const sugerido=prefill||extraerNumPres(file.name);
         const num=prompt(`No se detectó número en "${file.name}".\nIntroduce el número de presupuesto:`, sugerido);
         if(!num||!num.trim()) continue;
         const key=num.trim().toUpperCase();
@@ -1215,41 +1248,74 @@ async function onPdfFile(evt, prefilledNum){
 
 async function verPresupuesto(num){
     if(!num) return;
-    const key=num.trim().replace(/_/g,'/').toUpperCase();
-    try{
-        // Intenta caché local primero, luego servidor
-        let buf=await getPresDB(key);
-        if(!buf){
-            toast('⏳ Descargando presupuesto…');
-            buf=await getPresServer(key);
-            if(buf) await savePresDB(key,buf); // cachear localmente
-        }
-        if(!buf){
-            const keys=await listPresAll();
-            const lista=keys.length?`\n\nPresupuestos disponibles:\n${keys.join('\n')}`:'';
-            const resp=confirm(`No se encontró el presupuesto:\n"${key}"${lista}\n\n¿Quieres subir el PDF ahora?`);
-            if(resp){
-                window._presNumPrefill=key;
-                document.getElementById('pdfIn').click();
-            }
-            return;
-        }
-        const blob=new Blob([buf],{type:'application/pdf'});
-        const url=URL.createObjectURL(blob);
-        // iOS Safari no renderiza PDFs completos en iframe — abrir en pestaña nueva
-        const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
-        if(isiOS){
-            window.open(url,'_blank');
-            return;
-        }
-        const ov=document.getElementById('pdfOverlay');
-        ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
+    const prefix=num.trim().replace(/_/g,'/').toUpperCase();
+    toast('⏳ Buscando presupuesto…');
+    const matchingKeys=await getPresByPrefix(prefix);
+    if(!matchingKeys.length){
+        const resp=confirm(`No se encontró el presupuesto:\n"${prefix}"\n\n¿Quieres subir el PDF ahora?`);
+        if(resp){ window._presNumPrefill=prefix; document.getElementById('pdfIn').click(); }
+        return;
+    }
+    const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+    if(matchingKeys.length===1){
+        await abrirPdf(matchingKeys[0], isiOS);
+    } else {
+        await mostrarMultiPdf(prefix, matchingKeys, isiOS);
+    }
+}
+
+async function abrirPdf(key, isiOS){
+    toast('⏳ Cargando…');
+    const buf=await getPresLocal(key);
+    if(!buf){ toast('No se pudo cargar el PDF'); return; }
+    const blob=new Blob([buf],{type:'application/pdf'});
+    const url=URL.createObjectURL(blob);
+    if(isiOS){ window.open(url,'_blank'); return; }
+    const ov=document.getElementById('pdfOverlay');
+    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
+    ov.innerHTML=`<div class="pdf-toolbar">
+        <span class="pdf-toolbar-title">📄 ${esc(key)}</span>
+        <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
+    </div>
+    <iframe class="pdf-frame" src="${url}#toolbar=0"></iframe>`;
+}
+
+async function mostrarMultiPdf(prefix, keys, isiOS){
+    const ov=document.getElementById('pdfOverlay');
+    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
+    if(isiOS){
+        // iOS: lista de botones, cada uno abre en pestaña nueva
         ov.innerHTML=`<div class="pdf-toolbar">
-            <span class="pdf-toolbar-title">📄 ${esc(key)}</span>
+            <span class="pdf-toolbar-title">📄 ${esc(prefix)} — ${keys.length} docs</span>
             <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
         </div>
-        <iframe class="pdf-frame" src="${url}#toolbar=0"></iframe>`;
-    }catch(e){ toast('Error: '+e.message); }
+        <div style="overflow:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:10px">
+            ${keys.map(k=>`<button onclick="abrirPdf('${esc(k)}',true)" style="padding:14px 16px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-size:15px;text-align:left;cursor:pointer">
+                📄 ${esc(k.replace(prefix,'').trim().replace(/^\//,''))||esc(k)}
+            </button>`).join('')}
+        </div>`;
+    } else {
+        // Desktop: iframes apilados, uno debajo del otro
+        ov.innerHTML=`<div class="pdf-toolbar">
+            <span class="pdf-toolbar-title">📄 ${esc(prefix)} — ${keys.length} docs</span>
+            <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
+        </div>
+        <div style="overflow:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:20px">
+            ${keys.map((k,i)=>`<div>
+                <div style="color:#ccc;font-size:12px;margin-bottom:4px">📄 ${esc(k)}</div>
+                <iframe id="mpdf${i}" style="width:100%;height:80vh;border:none;border-radius:6px" loading="lazy"></iframe>
+            </div>`).join('')}
+        </div>`;
+        // Carga los PDFs en los iframes
+        for(let i=0;i<keys.length;i++){
+            const buf=await getPresLocal(keys[i]);
+            if(buf){
+                const url=URL.createObjectURL(new Blob([buf],{type:'application/pdf'}));
+                const iframe=document.getElementById(`mpdf${i}`);
+                if(iframe) iframe.src=url+'#toolbar=0';
+            }
+        }
+    }
 }
 
 function closePdfOverlay(){
