@@ -39,6 +39,45 @@
             cursor:pointer;display:flex;align-items:center;justify-content:center}
         .hdr-btn:active{background:rgba(255,255,255,.25)}
 
+        /* ══ PRESUPUESTOS ══ */
+        .pres-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;
+            display:flex;flex-direction:column;justify-content:flex-end}
+        .pres-sheet{background:#fff;border-radius:20px 20px 0 0;max-height:85vh;
+            display:flex;flex-direction:column;overflow:hidden}
+        .pres-header{padding:16px 20px 12px;border-bottom:1px solid var(--border);
+            display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+        .pres-title{font-size:17px;font-weight:700;color:var(--text)}
+        .pres-close{width:32px;height:32px;border-radius:50%;border:none;
+            background:var(--border);color:var(--text);font-size:18px;cursor:pointer;
+            display:flex;align-items:center;justify-content:center}
+        .pres-body{flex:1;overflow-y:auto;padding:16px 20px}
+        .pres-upload-btn{width:100%;padding:14px;border-radius:12px;border:2px dashed var(--blue-light);
+            background:rgba(38,83,168,.06);color:var(--blue-light);font-size:15px;font-weight:600;
+            cursor:pointer;margin-bottom:16px}
+        .pres-list{display:flex;flex-direction:column;gap:8px}
+        .pres-item{display:flex;align-items:center;gap:10px;padding:12px 14px;
+            background:var(--card2);border-radius:10px;border:1px solid var(--border)}
+        .pres-item-num{flex:1;font-size:13px;font-weight:600;color:var(--text)}
+        .pres-item-btn{padding:6px 12px;border-radius:8px;border:none;
+            background:var(--blue-light);color:#fff;font-size:12px;font-weight:600;cursor:pointer}
+        .pres-item-del{padding:6px 10px;border-radius:8px;border:none;
+            background:#fee2e2;color:#dc2626;font-size:14px;cursor:pointer}
+        .pres-empty{text-align:center;color:var(--muted);padding:24px 0;font-size:14px}
+        .ver-pres-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;
+            border-radius:10px;border:none;background:#e0f2fe;color:#0369a1;
+            font-size:13px;font-weight:600;cursor:pointer;margin-top:4px;width:100%;
+            justify-content:center}
+        .ver-pres-btn:active{background:#bae6fd}
+        .pdf-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;
+            display:flex;flex-direction:column}
+        .pdf-toolbar{display:flex;align-items:center;justify-content:space-between;
+            padding:12px 16px;background:#1a1a1a;flex-shrink:0}
+        .pdf-toolbar-title{color:#fff;font-size:14px;font-weight:600;flex:1;
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .pdf-close-btn{padding:6px 14px;border-radius:8px;border:none;
+            background:rgba(255,255,255,.15);color:#fff;font-size:14px;cursor:pointer}
+        .pdf-frame{flex:1;border:none;width:100%;background:#525659}
+
         .status-bar{display:flex;align-items:center;gap:6px;padding:8px 0 10px;
             font-size:11px;color:rgba(255,255,255,.55)}
         .status-dot{width:7px;height:7px;border-radius:50%;background:#6b7fa0;flex-shrink:0}
@@ -242,6 +281,7 @@
             <div class="hdr-sub" id="hdrSub">Temporada 2026</div>
         </div>
         <div class="hdr-actions">
+            <button class="hdr-btn" onclick="openPresSheet()" title="Presupuestos" style="font-size:18px">📄</button>
             <button class="hdr-btn" onclick="document.getElementById('fileIn').click()" title="Subir Excel">＋</button>
         </div>
     </div>
@@ -275,16 +315,35 @@
 <div id="root"></div>
 <div id="toast"></div>
 <input id="fileIn" type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="onFile(event)">
+<input id="pdfIn" type="file" accept=".pdf" style="display:none" onchange="onPdfFile(event)">
+<div id="presOverlay" style="display:none"></div>
+<div id="pdfOverlay" style="display:none"></div>
 
 <script>
 /* ══════════════════════════════════════
    CONFIG
 ══════════════════════════════════════ */
 let YEAR = new Date().getFullYear();
-const MESES_NOMBRES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const MESES_SHORT   = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-let ALL_TABS = [];
-let TABS = [];
+const NOMBRES_MES_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function buildAllTabs(y){
+    const yy=String(y).slice(2);
+    return [
+        {name:'Enero',      short:`Ene ${yy}`, mesIdx:0},
+        {name:'Febrero',    short:`Feb ${yy}`, mesIdx:1},
+        {name:'Marzo',      short:`Mar ${yy}`, mesIdx:2},
+        {name:'Abril',      short:`Abr ${yy}`, mesIdx:3},
+        {name:'Mayo',       short:`May ${yy}`, mesIdx:4},
+        {name:'Junio',      short:`Jun ${yy}`, mesIdx:5},
+        {name:'Julio',      short:`Jul ${yy}`, mesIdx:6},
+        {name:'Agosto',     short:`Ago ${yy}`, mesIdx:7},
+        {name:'Septiembre', short:`Sep ${yy}`, mesIdx:8},
+        {name:'Octubre',    short:`Oct ${yy}`, mesIdx:9},
+        {name:'Noviembre',  short:`Nov ${yy}`, mesIdx:10},
+        {name:'Diciembre',  short:`Dic ${yy}`, mesIdx:11},
+    ];
+}
+let ALL_TABS = buildAllTabs(YEAR);
+let TABS = ALL_TABS;
 const DIAS_SEM = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -383,18 +442,20 @@ function parseWb(wb){
     if(cEstado===-1) cEstado=8; // fallback
     cDayStart=cEstado+1;
 
-    // Detectar año base del Excel (primera fecha válida)
-    let baseYear=new Date().getFullYear();
+    // Detectar el año del Excel escaneando la columna de fecha
     for(let r=range.s.r+1; r<=Math.min(range.s.r+50,range.e.r); r++){
         const fc=ws[enc(r,cFecha)];
         if(!fc) continue;
         let d=null;
         if(fc.t==='d') d=fc.v;
         else if(fc.t==='n'&&fc.v>40000) d=new Date(Math.round((fc.v-25569)*86400000));
-        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){ baseYear=d.getFullYear(); break; }
+        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){
+            YEAR=d.getFullYear(); break;
+        }
     }
+    ALL_TABS=buildAllTabs(YEAR);
 
-    let currentMes='', currentYear=baseYear, prevMesIdx=-1, dayColMap={};
+    let currentMes='', dayColMap={};
 
     for(let r=range.s.r+1; r<=range.e.r; r++){
         const aVal=val(r,cCliente);
@@ -403,10 +464,7 @@ function parseWb(wb){
         // Cabecera de sección: col A = nombre del mes, col B = vacío, cols de días = números 1-31
         const mesIdx=MESES_ES.findIndex(m=>norm(aVal)===m);
         if(mesIdx!==-1 && !bVal){
-            if(prevMesIdx!==-1 && mesIdx<=prevMesIdx) currentYear++; // nueva vuelta de año
-            prevMesIdx=mesIdx;
-            const mesNom=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
-            currentMes=`${mesNom} ${currentYear}`;
+            currentMes=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
             dayColMap={};
             for(let c=cDayStart; c<=range.e.c; c++){
                 const cl=cell(r,c); if(!cl) continue;
@@ -486,7 +544,7 @@ function parseWb(wb){
         let fechaFin='';
         if(lastDay>0){
             const mi=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
-            if(mi>=0){ const fd=new Date(currentYear,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
+            if(mi>=0){ const fd=new Date(YEAR,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
         }
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
@@ -507,7 +565,7 @@ function parseWb(wb){
         if(fechaISO){
             const mesIdx=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
             const fechaD=new Date(fechaISO);
-            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===currentYear){
+            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===YEAR){
                 const inicioDay=fechaD.getDate();
                 if(!calRes[currentMes][inicioDay]) calRes[currentMes][inicioDay]=[];
                 const yaEsta=calRes[currentMes][inicioDay].some(x=>x.nObra===nObra&&x.cliente===cliente);
@@ -523,14 +581,13 @@ function parseWb(wb){
 
         listRes.push({
             cliente, nObra, obra:obraNombre, presupuesto, factura, desc,
-            fechaISO, fechaFin, fechaMs, estado, mes:currentMes, year:currentYear,
+            fechaISO, fechaFin, fechaMs, estado, mes:currentMes,
             empresa,
             trabajadores:[...trabajSet].join(', ')
         });
     }
 
     listRes.sort((a,b)=>{
-        if(a.year!==b.year) return a.year-b.year;
         const ma=MESES_ES.findIndex(m=>(a.mes||'').toLowerCase().startsWith(m));
         const mb=MESES_ES.findIndex(m=>(b.mes||'').toLowerCase().startsWith(m));
         if(ma!==mb) return ma-mb;
@@ -544,14 +601,11 @@ function parseWb(wb){
 ══════════════════════════════════════ */
 function render(){
     const tab  =TABS[activeTab];
-    if(!tab) return;
-    const tabYear=tab.year||YEAR;
     const mData=planData[tab.name]||{};
-    const dias =new Date(tabYear,tab.mesIdx+1,0).getDate();
-    const offset=(new Date(tabYear,tab.mesIdx,1).getDay()+6)%7;
+    const dias =new Date(YEAR,tab.mesIdx+1,0).getDate();
+    const offset=(new Date(YEAR,tab.mesIdx,1).getDay()+6)%7;
     const hoy  =new Date();
-    const todayDay=(hoy.getFullYear()===tabYear&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
-    const my=document.getElementById('monthYear'); if(my) my.textContent=tabYear;
+    const todayDay=(hoy.getFullYear()===YEAR&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
 
     const diasConObra=Object.keys(mData).length;
     // Obras únicas del mes (por nombre de obra, no por día)
@@ -748,7 +802,7 @@ function openDay(tabIdx,day){
     const tab  =TABS[tabIdx];
     const obras=(planData[tab.name]||{})[day]||[];
     if(!obras.length) return;
-    const fecha =new Date(tab.year||YEAR,tab.mesIdx,day);
+    const fecha =new Date(YEAR,tab.mesIdx,day);
     const cards =obras.map(o=>`
         <div class="obra-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -807,6 +861,7 @@ function openDay(tabIdx,day){
                     <div class="obra-field-val" style="font-size:11px">${esc(o.factura)}</div>
                 </div>
             </div>`:''}
+            ${o.presupuesto?`<button class="ver-pres-btn" onclick="verPresupuesto('${esc(o.presupuesto)}')">📄 Ver presupuesto</button>`:''}
         </div>`).join('');
 
     const ov=document.createElement('div');
@@ -816,7 +871,7 @@ function openDay(tabIdx,day){
         <div class="bs-header-wrap">
             <div class="bs-date">
                 <div class="bs-day">${day} de ${tab.name}</div>
-                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${fecha.getFullYear()}</div>
+                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${YEAR}</div>
             </div>
             <button class="bs-close" onclick="closeModal()">×</button>
         </div>
@@ -945,35 +1000,28 @@ function toast(msg){
 }
 
 function rebuildTabs(){
-    // Construir tabs desde claves "Mes Año" del calData con datos reales
-    const entries=Object.entries(planData).filter(([,dias])=>Object.keys(dias).length>0);
-    ALL_TABS=[];
-    for(const[key] of entries){
-        const parts=key.split(' '); // "Junio 2026"
-        if(parts.length<2) continue;
-        const mesNom=parts[0], yr=parseInt(parts[parts.length-1]);
-        const mesIdx=MESES_NOMBRES.indexOf(mesNom);
-        if(mesIdx<0||isNaN(yr)) continue;
-        const yy=String(yr).slice(2);
-        ALL_TABS.push({name:key, short:`${MESES_SHORT[mesIdx]} ${yy}`, mesIdx, year:yr});
+    // Detectar año desde planList (fechaISO) si no viene del parseWb
+    if(planList&&planList.length){
+        const anyFecha=planList.find(o=>o.fechaISO&&o.fechaISO.length>=4);
+        if(anyFecha){ const y=parseInt(anyFecha.fechaISO.slice(0,4)); if(y>2000){ YEAR=y; ALL_TABS=buildAllTabs(YEAR); } }
     }
-    ALL_TABS.sort((a,b)=>a.year!==b.year?a.year-b.year:a.mesIdx-b.mesIdx);
-    TABS=ALL_TABS.length?ALL_TABS:[{name:'—',short:'—',mesIdx:0,year:new Date().getFullYear()}];
-
-    // Año para el header: el primer año con datos
-    YEAR=TABS[0]?.year||new Date().getFullYear();
+    const mesesConDatos=new Set(
+        Object.entries(planData)
+            .filter(([,dias])=>Object.keys(dias).length>0)
+            .map(([mes])=>mes)
+    );
+    TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
+    if(!TABS.length) TABS=ALL_TABS;
     const hdr=document.getElementById('hdrSub');
-    if(hdr) hdr.textContent=TABS.length?`Temporada ${TABS[0].year}–${TABS[TABS.length-1].year}`.replace(/(\d{4})–\1/,'$1'):'Planning';
+    if(hdr) hdr.textContent=`Temporada ${YEAR}`;
     const my=document.getElementById('monthYear');
-    if(my) my.textContent=TABS[activeTab]?.year||YEAR;
+    if(my) my.textContent=YEAR;
 }
 
 function tabActual(){
     const hoy=new Date();
-    const mi=TABS.findIndex(t=>t.year===hoy.getFullYear()&&t.mesIdx>=hoy.getMonth());
-    if(mi>=0) return mi;
-    const mi2=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
-    return mi2>=0?mi2:0;
+    const mi=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
+    return mi>=0?mi:0;
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1016,6 +1064,134 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     // 3. Sin datos
     mostrarVacio();
 })();
+
+/* ══════════════════════════════════════
+   PRESUPUESTOS — IndexedDB local
+══════════════════════════════════════ */
+let _presDB=null;
+function openPresDB(){
+    if(_presDB) return Promise.resolve(_presDB);
+    return new Promise((res,rej)=>{
+        const req=indexedDB.open('p1900presupuestos',1);
+        req.onupgradeneeded=e=>e.target.result.createObjectStore('pdfs');
+        req.onsuccess=e=>{_presDB=e.target.result;res(_presDB);};
+        req.onerror=()=>rej(new Error('IndexedDB error'));
+    });
+}
+async function savePresDB(num,buf){
+    const db=await openPresDB();
+    return new Promise((res,rej)=>{
+        const tx=db.transaction('pdfs','readwrite');
+        tx.objectStore('pdfs').put(buf,num);
+        tx.oncomplete=res; tx.onerror=rej;
+    });
+}
+async function getPresDB(num){
+    const db=await openPresDB();
+    return new Promise((res,rej)=>{
+        const req=db.transaction('pdfs').objectStore('pdfs').get(num);
+        req.onsuccess=e=>res(e.target.result||null);
+        req.onerror=rej;
+    });
+}
+async function listPresDB(){
+    const db=await openPresDB();
+    return new Promise((res,rej)=>{
+        const req=db.transaction('pdfs').objectStore('pdfs').getAllKeys();
+        req.onsuccess=e=>res(e.target.result||[]);
+        req.onerror=rej;
+    });
+}
+async function delPresDB(num){
+    const db=await openPresDB();
+    return new Promise((res,rej)=>{
+        const tx=db.transaction('pdfs','readwrite');
+        tx.objectStore('pdfs').delete(num);
+        tx.oncomplete=res; tx.onerror=rej;
+    });
+}
+
+async function onPdfFile(evt){
+    const file=evt.target.files[0]; if(!file) return;
+    evt.target.value='';
+    const base=file.name.replace(/\.pdf$/i,'');
+    const num=prompt(`Número de presupuesto para "${file.name}":`, base.toUpperCase());
+    if(!num||!num.trim()) return;
+    const key=num.trim().toUpperCase();
+    try{
+        const buf=await file.arrayBuffer();
+        await savePresDB(key,buf);
+        toast(`✓ Presupuesto ${key} guardado`);
+        renderPresSheet();
+    }catch(e){ toast('Error al guardar: '+e.message); }
+}
+
+async function verPresupuesto(num){
+    if(!num) return;
+    const key=num.trim().toUpperCase();
+    try{
+        const buf=await getPresDB(key);
+        if(!buf){ toast('No se encontró el presupuesto '+key); return; }
+        const blob=new Blob([buf],{type:'application/pdf'});
+        const url=URL.createObjectURL(blob);
+        const ov=document.getElementById('pdfOverlay');
+        ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
+        ov.innerHTML=`<div class="pdf-toolbar">
+            <span class="pdf-toolbar-title">📄 ${esc(key)}</span>
+            <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
+        </div>
+        <iframe class="pdf-frame" src="${url}#toolbar=0"></iframe>`;
+    }catch(e){ toast('Error: '+e.message); }
+}
+
+function closePdfOverlay(){
+    const ov=document.getElementById('pdfOverlay');
+    const iframe=ov.querySelector('iframe');
+    if(iframe) URL.revokeObjectURL(iframe.src.split('#')[0]);
+    ov.style.display='none';
+    ov.innerHTML='';
+}
+
+async function openPresSheet(){
+    const ov=document.getElementById('presOverlay');
+    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;flex-direction:column;justify-content:flex-end';
+    renderPresSheet();
+}
+
+async function renderPresSheet(){
+    const keys=await listPresDB();
+    const ov=document.getElementById('presOverlay');
+    const listaHtml=keys.length
+        ? keys.map(k=>`<div class="pres-item">
+            <span class="pres-item-num">📄 ${esc(k)}</span>
+            <button class="pres-item-btn" onclick="verPresupuesto('${esc(k)}')">Ver</button>
+            <button class="pres-item-del" onclick="delPres('${esc(k)}')">🗑</button>
+          </div>`).join('')
+        : `<div class="pres-empty">Aún no hay presupuestos guardados.<br>Pulsa el botón de abajo para añadir.</div>`;
+    ov.innerHTML=`<div class="pres-sheet">
+        <div class="pres-header">
+            <span class="pres-title">📄 Presupuestos</span>
+            <button class="pres-close" onclick="closePresSheet()">✕</button>
+        </div>
+        <div class="pres-body">
+            <button class="pres-upload-btn" onclick="document.getElementById('pdfIn').click()">
+                ＋ Subir presupuesto PDF
+            </button>
+            <div class="pres-list">${listaHtml}</div>
+        </div>
+    </div>`;
+}
+
+function closePresSheet(){
+    document.getElementById('presOverlay').style.display='none';
+}
+
+async function delPres(num){
+    if(!confirm(`¿Eliminar el presupuesto ${num}?`)) return;
+    await delPresDB(num);
+    toast(`Presupuesto ${num} eliminado`);
+    renderPresSheet();
+}
 </script>
 </body>
 </html>
