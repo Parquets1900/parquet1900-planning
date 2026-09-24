@@ -1078,7 +1078,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 })();
 
 /* ══════════════════════════════════════
-   PRESUPUESTOS — IndexedDB local
+   PRESUPUESTOS — IndexedDB (caché local) + Netlify Blobs (sync)
 ══════════════════════════════════════ */
 let _presDB=null;
 function openPresDB(){
@@ -1123,6 +1123,48 @@ async function delPresDB(num){
     });
 }
 
+// --- Servidor (Netlify Blobs via Function) ---
+async function listPresServer(){
+    try{
+        const r=await fetch('/api/presupuesto?list=1');
+        if(!r.ok) return [];
+        return await r.json();
+    }catch(e){ return []; }
+}
+async function getPresServer(num){
+    try{
+        const r=await fetch('/api/presupuesto?num='+encodeURIComponent(num));
+        if(!r.ok) return null;
+        return await r.arrayBuffer();
+    }catch(e){ return null; }
+}
+async function savePresServer(num,buf){
+    // Convierte ArrayBuffer a base64
+    const bytes=new Uint8Array(buf);
+    let b64='';
+    for(let i=0;i<bytes.length;i+=8192){
+        b64+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    }
+    const data=btoa(b64);
+    const r=await fetch('/api/presupuesto',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({num,data})
+    });
+    if(!r.ok) throw new Error(`Server error ${r.status}`);
+}
+async function delPresServer(num){
+    try{
+        await fetch('/api/presupuesto?num='+encodeURIComponent(num),{method:'DELETE'});
+    }catch(e){}
+}
+
+// Lista combinada: servidor + caché local (unión, sin duplicados)
+async function listPresAll(){
+    const [srv,local]=await Promise.all([listPresServer(),listPresDB()]);
+    return [...new Set([...srv,...local])].sort();
+}
+
 function extraerNumPres(filename){
     // Busca patrón tipo PRSTO_2026_000089 o PRSTO/2026/000089 en el nombre
     const m=filename.match(/([A-Z]{2,}[_\/]\d{4}[_\/]\d+)/i);
@@ -1140,8 +1182,12 @@ async function onPdfFile(evt, prefilledNum){
         const key=num.trim().toUpperCase();
         try{
             const buf=await file.arrayBuffer();
-            await savePresDB(key,buf);
-            toast(`✓ Presupuesto ${key} guardado`);
+            toast(`⏳ Subiendo ${key}…`);
+            await Promise.all([
+                savePresDB(key, buf),
+                savePresServer(key, buf)
+            ]);
+            toast(`✓ Presupuesto ${key} guardado y sincronizado`);
         }catch(e){ toast('Error al guardar '+file.name+': '+e.message); }
     }
     renderPresSheet();
@@ -1151,11 +1197,16 @@ async function verPresupuesto(num){
     if(!num) return;
     const key=num.trim().replace(/_/g,'/').toUpperCase();
     try{
-        const buf=await getPresDB(key);
+        // Intenta caché local primero, luego servidor
+        let buf=await getPresDB(key);
         if(!buf){
-            // No encontrado — listar lo que hay y ofrecer subir con el número pre-rellenado
-            const keys=await listPresDB();
-            const lista=keys.length?`\n\nPresupuestos guardados:\n${keys.join('\n')}`:'';
+            toast('⏳ Descargando presupuesto…');
+            buf=await getPresServer(key);
+            if(buf) await savePresDB(key,buf); // cachear localmente
+        }
+        if(!buf){
+            const keys=await listPresAll();
+            const lista=keys.length?`\n\nPresupuestos disponibles:\n${keys.join('\n')}`:'';
             const resp=confirm(`No se encontró el presupuesto:\n"${key}"${lista}\n\n¿Quieres subir el PDF ahora?`);
             if(resp){
                 window._presNumPrefill=key;
@@ -1190,8 +1241,16 @@ async function openPresSheet(){
 }
 
 async function renderPresSheet(){
-    const keys=await listPresDB();
     const ov=document.getElementById('presOverlay');
+    // Muestra spinner mientras carga
+    ov.innerHTML=`<div class="pres-sheet">
+        <div class="pres-header">
+            <span class="pres-title">📄 Presupuestos</span>
+            <button class="pres-close" onclick="closePresSheet()">✕</button>
+        </div>
+        <div class="pres-body"><div class="pres-empty">Cargando…</div></div>
+    </div>`;
+    const keys=await listPresAll();
     const listaHtml=keys.length
         ? keys.map(k=>`<div class="pres-item">
             <span class="pres-item-num">📄 ${esc(k)}</span>
@@ -1219,7 +1278,7 @@ function closePresSheet(){
 
 async function delPres(num){
     if(!confirm(`¿Eliminar el presupuesto ${num}?`)) return;
-    await delPresDB(num);
+    await Promise.all([delPresDB(num), delPresServer(num)]);
     toast(`Presupuesto ${num} eliminado`);
     renderPresSheet();
 }
