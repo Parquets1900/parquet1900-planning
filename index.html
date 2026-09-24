@@ -1123,12 +1123,18 @@ async function delPresDB(num){
     });
 }
 
+function extraerNumPres(filename){
+    // Busca patrón tipo PRSTO_2026_000089 o PRSTO/2026/000089 en el nombre
+    const m=filename.match(/([A-Z]{2,}[_\/]\d{4}[_\/]\d+)/i);
+    if(m) return m[1].replace(/_/g,'/').toUpperCase();
+    return filename.replace(/\.pdf$/i,'');
+}
+
 async function onPdfFile(evt, prefilledNum){
     const files=[...evt.target.files]; if(!files.length) return;
     evt.target.value='';
     for(const file of files){
-        const base=file.name.replace(/\.pdf$/i,'');
-        const sugerido=prefilledNum||base;
+        const sugerido=prefilledNum||extraerNumPres(file.name);
         const num=prompt(`Número de presupuesto para "${file.name}":`, sugerido);
         if(!num||!num.trim()) continue;
         const key=num.trim().toUpperCase();
@@ -1143,7 +1149,7 @@ async function onPdfFile(evt, prefilledNum){
 
 async function verPresupuesto(num){
     if(!num) return;
-    const key=num.trim().toUpperCase();
+    const key=num.trim().replace(/_/g,'/').toUpperCase();
     try{
         const buf=await getPresDB(key);
         if(!buf){
