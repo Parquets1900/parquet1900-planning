@@ -1236,6 +1236,12 @@ async function verPresupuesto(num){
         }
         const blob=new Blob([buf],{type:'application/pdf'});
         const url=URL.createObjectURL(blob);
+        // iOS Safari no renderiza PDFs completos en iframe — abrir en pestaña nueva
+        const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+        if(isiOS){
+            window.open(url,'_blank');
+            return;
+        }
         const ov=document.getElementById('pdfOverlay');
         ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
         ov.innerHTML=`<div class="pdf-toolbar">
