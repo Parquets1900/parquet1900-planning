@@ -315,7 +315,7 @@
 <div id="root"></div>
 <div id="toast"></div>
 <input id="fileIn" type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="onFile(event)">
-<input id="pdfIn" type="file" accept=".pdf" style="display:none" onchange="onPdfFile(event)">
+<input id="pdfIn" type="file" accept=".pdf" multiple style="display:none" onchange="onPdfFile(event,window._presNumPrefill);window._presNumPrefill=null">
 <div id="presOverlay" style="display:none"></div>
 <div id="pdfOverlay" style="display:none"></div>
 
@@ -1123,19 +1123,22 @@ async function delPresDB(num){
     });
 }
 
-async function onPdfFile(evt){
-    const file=evt.target.files[0]; if(!file) return;
+async function onPdfFile(evt, prefilledNum){
+    const files=[...evt.target.files]; if(!files.length) return;
     evt.target.value='';
-    const base=file.name.replace(/\.pdf$/i,'');
-    const num=prompt(`Número de presupuesto para "${file.name}":`, base.toUpperCase());
-    if(!num||!num.trim()) return;
-    const key=num.trim().toUpperCase();
-    try{
-        const buf=await file.arrayBuffer();
-        await savePresDB(key,buf);
-        toast(`✓ Presupuesto ${key} guardado`);
-        renderPresSheet();
-    }catch(e){ toast('Error al guardar: '+e.message); }
+    for(const file of files){
+        const base=file.name.replace(/\.pdf$/i,'');
+        const sugerido=prefilledNum||base;
+        const num=prompt(`Número de presupuesto para "${file.name}":`, sugerido);
+        if(!num||!num.trim()) continue;
+        const key=num.trim().toUpperCase();
+        try{
+            const buf=await file.arrayBuffer();
+            await savePresDB(key,buf);
+            toast(`✓ Presupuesto ${key} guardado`);
+        }catch(e){ toast('Error al guardar '+file.name+': '+e.message); }
+    }
+    renderPresSheet();
 }
 
 async function verPresupuesto(num){
@@ -1143,7 +1146,17 @@ async function verPresupuesto(num){
     const key=num.trim().toUpperCase();
     try{
         const buf=await getPresDB(key);
-        if(!buf){ toast('No se encontró el presupuesto '+key); return; }
+        if(!buf){
+            // No encontrado — listar lo que hay y ofrecer subir con el número pre-rellenado
+            const keys=await listPresDB();
+            const lista=keys.length?`\n\nPresupuestos guardados:\n${keys.join('\n')}`:'';
+            const resp=confirm(`No se encontró el presupuesto:\n"${key}"${lista}\n\n¿Quieres subir el PDF ahora?`);
+            if(resp){
+                window._presNumPrefill=key;
+                document.getElementById('pdfIn').click();
+            }
+            return;
+        }
         const blob=new Blob([buf],{type:'application/pdf'});
         const url=URL.createObjectURL(blob);
         const ov=document.getElementById('pdfOverlay');
