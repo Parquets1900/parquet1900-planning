@@ -442,20 +442,18 @@ function parseWb(wb){
     if(cEstado===-1) cEstado=8; // fallback
     cDayStart=cEstado+1;
 
-    // Detectar el año del Excel escaneando la columna de fecha
-    for(let r=range.s.r+1; r<=Math.min(range.s.r+50,range.e.r); r++){
-        const fc=ws[enc(r,cFecha)];
-        if(!fc) continue;
+    // Año base = el mínimo año encontrado en la columna de fechas
+    let baseYear=new Date().getFullYear();
+    for(let r=range.s.r+1; r<=range.e.r; r++){
+        const fc=ws[enc(r,cFecha)]; if(!fc) continue;
         let d=null;
         if(fc.t==='d') d=fc.v;
         else if(fc.t==='n'&&fc.v>40000) d=new Date(Math.round((fc.v-25569)*86400000));
-        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000){
-            YEAR=d.getFullYear(); break;
-        }
+        if(d instanceof Date&&!isNaN(d)&&d.getFullYear()>2000 && d.getFullYear()<baseYear)
+            baseYear=d.getFullYear();
     }
-    ALL_TABS=buildAllTabs(YEAR);
 
-    let currentMes='', dayColMap={};
+    let currentMes='', currentYear=baseYear, prevMesIdx=-1, dayColMap={};
 
     for(let r=range.s.r+1; r<=range.e.r; r++){
         const aVal=val(r,cCliente);
@@ -464,7 +462,10 @@ function parseWb(wb){
         // Cabecera de sección: col A = nombre del mes, col B = vacío, cols de días = números 1-31
         const mesIdx=MESES_ES.findIndex(m=>norm(aVal)===m);
         if(mesIdx!==-1 && !bVal){
-            currentMes=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
+            if(prevMesIdx!==-1 && mesIdx<=prevMesIdx) currentYear++; // nueva vuelta de año
+            prevMesIdx=mesIdx;
+            const mesNom=aVal.charAt(0).toUpperCase()+aVal.slice(1).toLowerCase();
+            currentMes=`${mesNom} ${currentYear}`;
             dayColMap={};
             for(let c=cDayStart; c<=range.e.c; c++){
                 const cl=cell(r,c); if(!cl) continue;
@@ -544,7 +545,7 @@ function parseWb(wb){
         let fechaFin='';
         if(lastDay>0){
             const mi=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
-            if(mi>=0){ const fd=new Date(YEAR,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
+            if(mi>=0){ const fd=new Date(currentYear,mi,lastDay); fechaFin=`${fd.getFullYear()}-${String(fd.getMonth()+1).padStart(2,'0')}-${String(fd.getDate()).padStart(2,'0')}`; }
         }
 
         const esFin=lastDay>0&&(norm(estado).includes('facturada')||norm(estado).includes('para'));
@@ -565,7 +566,7 @@ function parseWb(wb){
         if(fechaISO){
             const mesIdx=MESES_ES.findIndex(m=>currentMes.toLowerCase().startsWith(m));
             const fechaD=new Date(fechaISO);
-            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===YEAR){
+            if(mesIdx>=0 && fechaD.getMonth()===mesIdx && fechaD.getFullYear()===currentYear){
                 const inicioDay=fechaD.getDate();
                 if(!calRes[currentMes][inicioDay]) calRes[currentMes][inicioDay]=[];
                 const yaEsta=calRes[currentMes][inicioDay].some(x=>x.nObra===nObra&&x.cliente===cliente);
@@ -581,13 +582,14 @@ function parseWb(wb){
 
         listRes.push({
             cliente, nObra, obra:obraNombre, presupuesto, factura, desc,
-            fechaISO, fechaFin, fechaMs, estado, mes:currentMes,
+            fechaISO, fechaFin, fechaMs, estado, mes:currentMes, year:currentYear,
             empresa,
             trabajadores:[...trabajSet].join(', ')
         });
     }
 
     listRes.sort((a,b)=>{
+        if((a.year||0)!==(b.year||0)) return (a.year||0)-(b.year||0);
         const ma=MESES_ES.findIndex(m=>(a.mes||'').toLowerCase().startsWith(m));
         const mb=MESES_ES.findIndex(m=>(b.mes||'').toLowerCase().startsWith(m));
         if(ma!==mb) return ma-mb;
@@ -601,11 +603,14 @@ function parseWb(wb){
 ══════════════════════════════════════ */
 function render(){
     const tab  =TABS[activeTab];
+    if(!tab) return;
+    const tabYear=tab.year||new Date().getFullYear();
     const mData=planData[tab.name]||{};
-    const dias =new Date(YEAR,tab.mesIdx+1,0).getDate();
-    const offset=(new Date(YEAR,tab.mesIdx,1).getDay()+6)%7;
+    const dias =new Date(tabYear,tab.mesIdx+1,0).getDate();
+    const offset=(new Date(tabYear,tab.mesIdx,1).getDay()+6)%7;
     const hoy  =new Date();
-    const todayDay=(hoy.getFullYear()===YEAR&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
+    const todayDay=(hoy.getFullYear()===tabYear&&hoy.getMonth()===tab.mesIdx)?hoy.getDate():-1;
+    const my=document.getElementById('monthYear'); if(my) my.textContent=tabYear;
 
     const diasConObra=Object.keys(mData).length;
     // Obras únicas del mes (por nombre de obra, no por día)
@@ -802,7 +807,7 @@ function openDay(tabIdx,day){
     const tab  =TABS[tabIdx];
     const obras=(planData[tab.name]||{})[day]||[];
     if(!obras.length) return;
-    const fecha =new Date(YEAR,tab.mesIdx,day);
+    const fecha =new Date(tab.year||YEAR,tab.mesIdx,day);
     const cards =obras.map(o=>`
         <div class="obra-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -871,7 +876,7 @@ function openDay(tabIdx,day){
         <div class="bs-header-wrap">
             <div class="bs-date">
                 <div class="bs-day">${day} de ${tab.name}</div>
-                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${YEAR}</div>
+                <div class="bs-weekday">${DIAS_SEM[fecha.getDay()].charAt(0).toUpperCase()+DIAS_SEM[fecha.getDay()].slice(1)} · ${fecha.getFullYear()}</div>
             </div>
             <button class="bs-close" onclick="closeModal()">×</button>
         </div>
@@ -999,29 +1004,36 @@ function toast(msg){
     _tt=setTimeout(()=>{el.style.opacity='0';},3000);
 }
 
+const MESES_NOMBRES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_SHORT2  =['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
 function rebuildTabs(){
-    // Detectar año desde planList (fechaISO) si no viene del parseWb
-    if(planList&&planList.length){
-        const anyFecha=planList.find(o=>o.fechaISO&&o.fechaISO.length>=4);
-        if(anyFecha){ const y=parseInt(anyFecha.fechaISO.slice(0,4)); if(y>2000){ YEAR=y; ALL_TABS=buildAllTabs(YEAR); } }
+    // Construir tabs desde claves "Mes Año" del calData con datos reales
+    const tabs=[];
+    for(const[key,dias] of Object.entries(planData)){
+        if(!Object.keys(dias).length) continue;
+        const parts=key.split(' ');
+        if(parts.length<2) continue;
+        const mesNom=parts[0], yr=parseInt(parts[parts.length-1]);
+        const mi=MESES_NOMBRES.indexOf(mesNom);
+        if(mi<0||isNaN(yr)) continue;
+        tabs.push({name:key, short:`${MESES_SHORT2[mi]} ${String(yr).slice(2)}`, mesIdx:mi, year:yr});
     }
-    const mesesConDatos=new Set(
-        Object.entries(planData)
-            .filter(([,dias])=>Object.keys(dias).length>0)
-            .map(([mes])=>mes)
-    );
-    TABS = ALL_TABS.filter(t=>mesesConDatos.has(t.name));
-    if(!TABS.length) TABS=ALL_TABS;
-    const hdr=document.getElementById('hdrSub');
-    if(hdr) hdr.textContent=`Temporada ${YEAR}`;
-    const my=document.getElementById('monthYear');
-    if(my) my.textContent=YEAR;
+    tabs.sort((a,b)=>a.year!==b.year?a.year-b.year:a.mesIdx-b.mesIdx);
+    TABS=tabs.length?tabs:[{name:'—',short:'—',mesIdx:new Date().getMonth(),year:new Date().getFullYear()}];
+    ALL_TABS=TABS;
+
+    const years=[...new Set(TABS.map(t=>t.year))];
+    const hdrTxt=years.length>1?`Temporada ${years[0]}–${years[years.length-1]}`:`Temporada ${years[0]||new Date().getFullYear()}`;
+    const hdr=document.getElementById('hdrSub'); if(hdr) hdr.textContent=hdrTxt;
 }
 
 function tabActual(){
     const hoy=new Date();
-    const mi=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
-    return mi>=0?mi:0;
+    const mi=TABS.findIndex(t=>t.year===hoy.getFullYear()&&t.mesIdx>=hoy.getMonth());
+    if(mi>=0) return mi;
+    const mi2=TABS.findIndex(t=>t.mesIdx>=hoy.getMonth());
+    return mi2>=0?mi2:0;
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
