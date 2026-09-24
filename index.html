@@ -1175,21 +1175,41 @@ function extraerNumPres(filename){
 async function onPdfFile(evt, prefilledNum){
     const files=[...evt.target.files]; if(!files.length) return;
     evt.target.value='';
+    const sinDetectar=[];
+    let ok=0, err=0;
+
     for(const file of files){
-        const sugerido=prefilledNum||extraerNumPres(file.name);
-        const num=prompt(`Número de presupuesto para "${file.name}":`, sugerido);
+        const autoNum=prefilledNum||extraerNumPres(file.name);
+        // Si el nombre tiene patrón reconocible, sube sin preguntar
+        const tienePatron=/[A-Z]{2,}\/\d{4}\/\d+/.test(autoNum);
+        if(tienePatron){
+            const key=autoNum.trim().toUpperCase();
+            try{
+                const buf=await file.arrayBuffer();
+                await Promise.all([savePresDB(key,buf), savePresServer(key,buf)]);
+                ok++;
+            }catch(e){ err++; }
+        } else {
+            sinDetectar.push(file);
+        }
+    }
+
+    if(ok>0) toast(`✓ ${ok} presupuesto${ok>1?'s':''} subido${ok>1?'s':''} y sincronizados`);
+    if(err>0) toast(`⚠️ ${err} error${err>1?'s':''} al subir`);
+
+    // Los que no tienen patrón: preguntar uno a uno
+    for(const file of sinDetectar){
+        const sugerido=extraerNumPres(file.name);
+        const num=prompt(`No se detectó número en "${file.name}".\nIntroduce el número de presupuesto:`, sugerido);
         if(!num||!num.trim()) continue;
         const key=num.trim().toUpperCase();
         try{
             const buf=await file.arrayBuffer();
-            toast(`⏳ Subiendo ${key}…`);
-            await Promise.all([
-                savePresDB(key, buf),
-                savePresServer(key, buf)
-            ]);
-            toast(`✓ Presupuesto ${key} guardado y sincronizado`);
-        }catch(e){ toast('Error al guardar '+file.name+': '+e.message); }
+            await Promise.all([savePresDB(key,buf), savePresServer(key,buf)]);
+            toast(`✓ ${key} guardado`);
+        }catch(e){ toast('Error: '+e.message); }
     }
+
     renderPresSheet();
 }
 
