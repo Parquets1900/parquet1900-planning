@@ -39,44 +39,6 @@
             cursor:pointer;display:flex;align-items:center;justify-content:center}
         .hdr-btn:active{background:rgba(255,255,255,.25)}
 
-        /* ══ PRESUPUESTOS ══ */
-        .pres-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;
-            display:flex;flex-direction:column;justify-content:flex-end}
-        .pres-sheet{background:#fff;border-radius:20px 20px 0 0;max-height:85vh;
-            display:flex;flex-direction:column;overflow:hidden}
-        .pres-header{padding:16px 20px 12px;border-bottom:1px solid var(--border);
-            display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-        .pres-title{font-size:17px;font-weight:700;color:var(--text)}
-        .pres-close{width:32px;height:32px;border-radius:50%;border:none;
-            background:var(--border);color:var(--text);font-size:18px;cursor:pointer;
-            display:flex;align-items:center;justify-content:center}
-        .pres-body{flex:1;overflow-y:auto;padding:16px 20px}
-        .pres-upload-btn{width:100%;padding:14px;border-radius:12px;border:2px dashed var(--blue-light);
-            background:rgba(38,83,168,.06);color:var(--blue-light);font-size:15px;font-weight:600;
-            cursor:pointer;margin-bottom:16px}
-        .pres-list{display:flex;flex-direction:column;gap:8px}
-        .pres-item{display:flex;align-items:center;gap:10px;padding:12px 14px;
-            background:var(--card2);border-radius:10px;border:1px solid var(--border)}
-        .pres-item-num{flex:1;font-size:13px;font-weight:600;color:var(--text)}
-        .pres-item-btn{padding:6px 12px;border-radius:8px;border:none;
-            background:var(--blue-light);color:#fff;font-size:12px;font-weight:600;cursor:pointer}
-        .pres-item-del{padding:6px 10px;border-radius:8px;border:none;
-            background:#fee2e2;color:#dc2626;font-size:14px;cursor:pointer}
-        .pres-empty{text-align:center;color:var(--muted);padding:24px 0;font-size:14px}
-        .ver-pres-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;
-            border-radius:10px;border:none;background:#e0f2fe;color:#0369a1;
-            font-size:13px;font-weight:600;cursor:pointer;margin-top:4px;width:100%;
-            justify-content:center}
-        .ver-pres-btn:active{background:#bae6fd}
-        .pdf-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;
-            display:flex;flex-direction:column}
-        .pdf-toolbar{display:flex;align-items:center;justify-content:space-between;
-            padding:12px 16px;background:#1a1a1a;flex-shrink:0}
-        .pdf-toolbar-title{color:#fff;font-size:14px;font-weight:600;flex:1;
-            overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .pdf-close-btn{padding:6px 14px;border-radius:8px;border:none;
-            background:rgba(255,255,255,.15);color:#fff;font-size:14px;cursor:pointer}
-        .pdf-frame{flex:1;border:none;width:100%;background:#525659}
 
         .status-bar{display:flex;align-items:center;gap:6px;padding:8px 0 10px;
             font-size:11px;color:rgba(255,255,255,.55)}
@@ -281,7 +243,6 @@
             <div class="hdr-sub" id="hdrSub">Temporada 2026</div>
         </div>
         <div class="hdr-actions">
-            <button class="hdr-btn" onclick="openPresSheet()" title="Presupuestos" style="font-size:18px">📄</button>
             <button class="hdr-btn" onclick="document.getElementById('fileIn').click()" title="Subir Excel">＋</button>
         </div>
     </div>
@@ -315,9 +276,6 @@
 <div id="root"></div>
 <div id="toast"></div>
 <input id="fileIn" type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="onFile(event)">
-<input id="pdfIn" type="file" accept=".pdf" multiple style="display:none" onchange="onPdfFile(event,window._presNumPrefill);window._presNumPrefill=null">
-<div id="presOverlay" style="display:none"></div>
-<div id="pdfOverlay" style="display:none"></div>
 
 <script>
 /* ══════════════════════════════════════
@@ -733,7 +691,7 @@ function renderPlanning(){
                 ${o.fechaISO&&o.trabajadores?`<span class="pl-fecha">Inicio: ${fmtFecha(o.fechaISO)}</span>`:''}
                 ${o.fechaFin?`<span class="pl-fecha">Fin: ${fmtFecha(o.fechaFin)}${esFin?' ✓':''}</span>`:''}
             </div>
-            ${o.presupuesto?`<div style="font-size:11px;color:var(--muted)">📄 ${esc(o.presupuesto)}</div>`:''}
+
             ${o.factura?`<div style="font-size:11px;color:var(--muted)">🧾 ${esc(o.factura)}</div>`:''}
             ${o.empresa?`<div class="pl-trabajadores">🏢 ${esc(o.empresa)}</div>`:''}
         </div>`;
@@ -866,7 +824,6 @@ function openDay(tabIdx,day){
                     <div class="obra-field-val" style="font-size:11px">${esc(o.factura)}</div>
                 </div>
             </div>`:''}
-            ${o.presupuesto?`<button class="ver-pres-btn" onclick="verPresupuesto('${esc(o.presupuesto)}')">📄 Ver presupuesto</button>`:''}
         </div>`).join('');
 
     const ov=document.createElement('div');
@@ -1077,303 +1034,6 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     mostrarVacio();
 })();
 
-/* ══════════════════════════════════════
-   PRESUPUESTOS — IndexedDB (caché local) + Netlify Blobs (sync)
-══════════════════════════════════════ */
-let _presDB=null;
-function openPresDB(){
-    if(_presDB) return Promise.resolve(_presDB);
-    return new Promise((res,rej)=>{
-        const req=indexedDB.open('p1900presupuestos',1);
-        req.onupgradeneeded=e=>e.target.result.createObjectStore('pdfs');
-        req.onsuccess=e=>{_presDB=e.target.result;res(_presDB);};
-        req.onerror=()=>rej(new Error('IndexedDB error'));
-    });
-}
-async function savePresDB(num,buf){
-    const db=await openPresDB();
-    return new Promise((res,rej)=>{
-        const tx=db.transaction('pdfs','readwrite');
-        tx.objectStore('pdfs').put(buf,num);
-        tx.oncomplete=res; tx.onerror=rej;
-    });
-}
-async function getPresDB(num){
-    const db=await openPresDB();
-    return new Promise((res,rej)=>{
-        const req=db.transaction('pdfs').objectStore('pdfs').get(num);
-        req.onsuccess=e=>res(e.target.result||null);
-        req.onerror=rej;
-    });
-}
-async function listPresDB(){
-    const db=await openPresDB();
-    return new Promise((res,rej)=>{
-        const req=db.transaction('pdfs').objectStore('pdfs').getAllKeys();
-        req.onsuccess=e=>res(e.target.result||[]);
-        req.onerror=rej;
-    });
-}
-async function delPresDB(num){
-    const db=await openPresDB();
-    return new Promise((res,rej)=>{
-        const tx=db.transaction('pdfs','readwrite');
-        tx.objectStore('pdfs').delete(num);
-        tx.oncomplete=res; tx.onerror=rej;
-    });
-}
-
-// --- Servidor (Netlify Blobs via Function) ---
-async function listPresServer(){
-    try{
-        const r=await fetch('/api/presupuesto?list=1');
-        if(!r.ok) return [];
-        return await r.json();
-    }catch(e){ return []; }
-}
-async function searchPresServer(prefix){
-    try{
-        const r=await fetch('/api/presupuesto?prefix='+encodeURIComponent(prefix));
-        if(!r.ok) return [];
-        return await r.json();
-    }catch(e){ return []; }
-}
-async function getPresServer(num){
-    try{
-        const r=await fetch('/api/presupuesto?num='+encodeURIComponent(num));
-        if(!r.ok) return null;
-        return await r.arrayBuffer();
-    }catch(e){ return null; }
-}
-async function savePresServer(num,buf){
-    const bytes=new Uint8Array(buf);
-    let b64='';
-    for(let i=0;i<bytes.length;i+=8192){
-        b64+=String.fromCharCode(...bytes.subarray(i,i+8192));
-    }
-    const data=btoa(b64);
-    const r=await fetch('/api/presupuesto',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({num,data})
-    });
-    if(!r.ok) throw new Error(`Server error ${r.status}`);
-}
-async function delPresServer(num){
-    try{
-        await fetch('/api/presupuesto?num='+encodeURIComponent(num),{method:'DELETE'});
-    }catch(e){}
-}
-
-// Lista combinada: servidor + caché local
-async function listPresAll(){
-    const [srv,local]=await Promise.all([listPresServer(),listPresDB()]);
-    return [...new Set([...srv,...local])].sort();
-}
-
-// Busca por prefijo: PRSTO/2026/000261 → todas las claves que empiecen por ese número
-async function getPresByPrefix(prefix){
-    const [srvKeys,localKeys]=await Promise.all([
-        searchPresServer(prefix),
-        listPresDB()
-    ]);
-    const filtered=localKeys.filter(k=>k===prefix||k.startsWith(prefix+' ')||k.startsWith(prefix+'/'));
-    return [...new Set([...srvKeys,...filtered])].sort();
-}
-
-// Obtiene un PDF: caché local primero, luego servidor
-async function getPresLocal(key){
-    let buf=await getPresDB(key);
-    if(!buf){
-        buf=await getPresServer(key);
-        if(buf) await savePresDB(key,buf);
-    }
-    return buf;
-}
-
-function extraerNumPres(filename){
-    // Busca patrón tipo PRSTO_2026_000089 o PRSTO/2026/000089 en el nombre
-    const m=filename.match(/([A-Z]{2,}[_\/]\d{4}[_\/]\d+)/i);
-    if(m) return m[1].replace(/_/g,'/').toUpperCase();
-    return filename.replace(/\.pdf$/i,'');
-}
-
-function filenameToKey(filename){
-    // PRSTO_2026_000261 AJUNTAMENT DE GIRONA.pdf → PRSTO/2026/000261 AJUNTAMENT DE GIRONA
-    const base=filename.replace(/\.pdf$/i,'').trim();
-    return base.replace(/^([A-Za-z]{2,})_(\d{4})_(\d+(?:[._]\d+)?)/,
-        (_,a,b,c)=>`${a.toUpperCase()}/${b}/${c.replace(/[_.]/g,'/')}`
-    );
-}
-
-async function onPdfFile(evt, prefilledNum){
-    const files=[...evt.target.files]; if(!files.length) return;
-    evt.target.value='';
-    const sinDetectar=[];
-    let ok=0, err=0;
-
-    for(const file of files){
-        const autoNum=prefilledNum||extraerNumPres(file.name);
-        const tienePatron=/[A-Z]{2,}\/\d{4}\/\d+/.test(autoNum);
-        if(tienePatron && !prefilledNum){
-            // Usa el nombre completo como clave para no sobreescribir otros con el mismo número
-            const key=filenameToKey(file.name);
-            try{
-                const buf=await file.arrayBuffer();
-                await Promise.all([savePresDB(key,buf), savePresServer(key,buf)]);
-                ok++;
-            }catch(e){ err++; }
-        } else {
-            sinDetectar.push({file, prefill: prefilledNum});
-        }
-    }
-
-    if(ok>0) toast(`✓ ${ok} presupuesto${ok>1?'s':''} subido${ok>1?'s':''} y sincronizados`);
-    if(err>0) toast(`⚠️ ${err} error${err>1?'s':''} al subir`);
-
-    for(const {file, prefill} of sinDetectar){
-        const sugerido=prefill||extraerNumPres(file.name);
-        const num=prompt(`No se detectó número en "${file.name}".\nIntroduce el número de presupuesto:`, sugerido);
-        if(!num||!num.trim()) continue;
-        const key=num.trim().toUpperCase();
-        try{
-            const buf=await file.arrayBuffer();
-            await Promise.all([savePresDB(key,buf), savePresServer(key,buf)]);
-            toast(`✓ ${key} guardado`);
-        }catch(e){ toast('Error: '+e.message); }
-    }
-
-    renderPresSheet();
-}
-
-async function verPresupuesto(num){
-    if(!num) return;
-    const prefix=num.trim().replace(/_/g,'/').toUpperCase();
-    toast('⏳ Buscando presupuesto…');
-    const matchingKeys=await getPresByPrefix(prefix);
-    if(!matchingKeys.length){
-        const resp=confirm(`No se encontró el presupuesto:\n"${prefix}"\n\n¿Quieres subir el PDF ahora?`);
-        if(resp){ window._presNumPrefill=prefix; document.getElementById('pdfIn').click(); }
-        return;
-    }
-    const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
-    if(matchingKeys.length===1){
-        await abrirPdf(matchingKeys[0], isiOS);
-    } else {
-        await mostrarMultiPdf(prefix, matchingKeys, isiOS);
-    }
-}
-
-async function abrirPdf(key, isiOS){
-    toast('⏳ Cargando…');
-    const buf=await getPresLocal(key);
-    if(!buf){ toast('No se pudo cargar el PDF'); return; }
-    const blob=new Blob([buf],{type:'application/pdf'});
-    const url=URL.createObjectURL(blob);
-    if(isiOS){ window.open(url,'_blank'); return; }
-    const ov=document.getElementById('pdfOverlay');
-    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
-    ov.innerHTML=`<div class="pdf-toolbar">
-        <span class="pdf-toolbar-title">📄 ${esc(key)}</span>
-        <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
-    </div>
-    <iframe class="pdf-frame" src="${url}#toolbar=0"></iframe>`;
-}
-
-async function mostrarMultiPdf(prefix, keys, isiOS){
-    const ov=document.getElementById('pdfOverlay');
-    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;flex-direction:column';
-    if(isiOS){
-        // iOS: lista de botones, cada uno abre en pestaña nueva
-        ov.innerHTML=`<div class="pdf-toolbar">
-            <span class="pdf-toolbar-title">📄 ${esc(prefix)} — ${keys.length} docs</span>
-            <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
-        </div>
-        <div style="overflow:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:10px">
-            ${keys.map(k=>`<button onclick="abrirPdf('${esc(k)}',true)" style="padding:14px 16px;background:#2563eb;color:#fff;border:none;border-radius:10px;font-size:15px;text-align:left;cursor:pointer">
-                📄 ${esc(k.replace(prefix,'').trim().replace(/^\//,''))||esc(k)}
-            </button>`).join('')}
-        </div>`;
-    } else {
-        // Desktop: iframes apilados, uno debajo del otro
-        ov.innerHTML=`<div class="pdf-toolbar">
-            <span class="pdf-toolbar-title">📄 ${esc(prefix)} — ${keys.length} docs</span>
-            <button class="pdf-close-btn" onclick="closePdfOverlay()">✕ Cerrar</button>
-        </div>
-        <div style="overflow:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:20px">
-            ${keys.map((k,i)=>`<div>
-                <div style="color:#ccc;font-size:12px;margin-bottom:4px">📄 ${esc(k)}</div>
-                <iframe id="mpdf${i}" style="width:100%;height:80vh;border:none;border-radius:6px" loading="lazy"></iframe>
-            </div>`).join('')}
-        </div>`;
-        // Carga los PDFs en los iframes
-        for(let i=0;i<keys.length;i++){
-            const buf=await getPresLocal(keys[i]);
-            if(buf){
-                const url=URL.createObjectURL(new Blob([buf],{type:'application/pdf'}));
-                const iframe=document.getElementById(`mpdf${i}`);
-                if(iframe) iframe.src=url+'#toolbar=0';
-            }
-        }
-    }
-}
-
-function closePdfOverlay(){
-    const ov=document.getElementById('pdfOverlay');
-    const iframe=ov.querySelector('iframe');
-    if(iframe) URL.revokeObjectURL(iframe.src.split('#')[0]);
-    ov.style.display='none';
-    ov.innerHTML='';
-}
-
-async function openPresSheet(){
-    const ov=document.getElementById('presOverlay');
-    ov.style.cssText='display:flex;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;flex-direction:column;justify-content:flex-end';
-    renderPresSheet();
-}
-
-async function renderPresSheet(){
-    const ov=document.getElementById('presOverlay');
-    // Muestra spinner mientras carga
-    ov.innerHTML=`<div class="pres-sheet">
-        <div class="pres-header">
-            <span class="pres-title">📄 Presupuestos</span>
-            <button class="pres-close" onclick="closePresSheet()">✕</button>
-        </div>
-        <div class="pres-body"><div class="pres-empty">Cargando…</div></div>
-    </div>`;
-    const keys=await listPresAll();
-    const listaHtml=keys.length
-        ? keys.map(k=>`<div class="pres-item">
-            <span class="pres-item-num">📄 ${esc(k)}</span>
-            <button class="pres-item-btn" onclick="verPresupuesto('${esc(k)}')">Ver</button>
-            <button class="pres-item-del" onclick="delPres('${esc(k)}')">🗑</button>
-          </div>`).join('')
-        : `<div class="pres-empty">Aún no hay presupuestos guardados.<br>Pulsa el botón de abajo para añadir.</div>`;
-    ov.innerHTML=`<div class="pres-sheet">
-        <div class="pres-header">
-            <span class="pres-title">📄 Presupuestos</span>
-            <button class="pres-close" onclick="closePresSheet()">✕</button>
-        </div>
-        <div class="pres-body">
-            <button class="pres-upload-btn" onclick="document.getElementById('pdfIn').click()">
-                ＋ Subir presupuesto PDF
-            </button>
-            <div class="pres-list">${listaHtml}</div>
-        </div>
-    </div>`;
-}
-
-function closePresSheet(){
-    document.getElementById('presOverlay').style.display='none';
-}
-
-async function delPres(num){
-    if(!confirm(`¿Eliminar el presupuesto ${num}?`)) return;
-    await Promise.all([delPresDB(num), delPresServer(num)]);
-    toast(`Presupuesto ${num} eliminado`);
-    renderPresSheet();
-}
 </script>
 </body>
 </html>
