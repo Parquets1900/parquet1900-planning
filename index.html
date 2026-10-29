@@ -314,6 +314,7 @@ function ocultarApp(){
 }
 
 netlifyIdentity.on('init', user => {
+    netlifyIdentity.close(); // evitar que el widget abra popup automático
     if(user){ mostrarApp(); }
     else { ocultarApp(); }
 });
@@ -327,10 +328,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     document.getElementById('loginBtn').addEventListener('click', ()=>{
         netlifyIdentity.open('login');
     });
-    // Ocultar app hasta verificar sesión
-    document.querySelector('.app-header').style.visibility='hidden';
-    document.getElementById('monthNav').style.visibility='hidden';
-    document.getElementById('loginScreen').style.display='flex';
+    // Si el widget ya inicializó con sesión activa (init antes de DOMContentLoaded), no ocultar
+    if (!netlifyIdentity.currentUser()) {
+        document.querySelector('.app-header').style.visibility='hidden';
+        document.getElementById('monthNav').style.visibility='hidden';
+        document.getElementById('loginScreen').style.display='flex';
+    }
 });
 
 /* ══════════════════════════════════════
