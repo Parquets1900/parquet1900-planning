@@ -911,22 +911,26 @@ async function guardarEnServidor(data, filename, fecha, list=[]) {
     try {
         await fetch('/api/data', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
             body: JSON.stringify({ data, filename, fecha, planList: list })
         });
     } catch { /* sin conexión, continuar */ }
 }
 
-function authHeaders(){
+async function authHeaders(){
     const user = netlifyIdentity.currentUser();
     if(!user) return {};
-    const token = user.token && user.token.access_token;
-    return token ? {'Authorization': `Bearer ${token}`} : {};
+    try {
+        const token = await user.jwt(); // refresca el JWT si está caducado
+        return token ? {'Authorization': `Bearer ${token}`} : {};
+    } catch {
+        return {};
+    }
 }
 
 async function cargarDesdeServidor() {
     try {
-        const res = await fetch('/api/data', {headers: authHeaders()});
+        const res = await fetch('/api/data', {headers: await authHeaders()});
         if (!res.ok) return null;
         return await res.json();
     } catch {
