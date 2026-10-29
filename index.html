@@ -169,8 +169,9 @@
         .team-text{color:#7ec8a0;font-size:12px}
 
         /* ══ MAIN TABS ══ */
-        .main-tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);padding:0 16px}
-        .main-tab{flex:1;padding:11px 0;font-size:13px;font-weight:600;color:var(--muted);
+        .main-tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);padding:0 16px;overflow-x:auto;scrollbar-width:none}
+        .main-tabs::-webkit-scrollbar{display:none}
+        .main-tab{flex:1;min-width:90px;padding:11px 0;font-size:13px;font-weight:600;color:var(--muted);
             border:none;background:none;cursor:pointer;border-bottom:2.5px solid transparent;
             display:flex;align-items:center;justify-content:center;gap:5px}
         .main-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
@@ -221,6 +222,41 @@
         .status-otro{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
         .pl-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
 
+        /* ══ SEGUIMIENTO ══ */
+        .seg-wrap{padding:12px}
+        .seg-controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+        .seg-search{flex:1;min-width:160px;padding:8px 12px;border-radius:10px;
+            border:1px solid var(--border);background:#fff;color:var(--text);font-size:14px;outline:none}
+        .seg-search:focus{border-color:var(--gold)}
+        .seg-sort{padding:7px 11px;border-radius:8px;font-size:12px;font-weight:600;
+            border:1px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;white-space:nowrap}
+        .seg-sort.on{border-color:var(--gold);color:var(--gold);background:#fdf8ee}
+        .seg-table-wrap{overflow-x:auto;border-radius:12px;
+            box-shadow:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06)}
+        .seg-table{width:100%;border-collapse:collapse;background:#fff;min-width:480px}
+        .seg-table thead th{background:var(--blue);color:rgba(255,255,255,.8);font-size:10px;
+            font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+            padding:9px 11px;text-align:right;white-space:nowrap}
+        .seg-table thead th:first-child{text-align:left}
+        .seg-table tbody tr{border-bottom:1px solid var(--border)}
+        .seg-table tbody tr:last-child{border-bottom:none}
+        .seg-gh td{background:#eef2f8;padding:7px 12px 5px;font-size:11px;
+            font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;border-bottom:none}
+        .seg-or td{padding:9px 11px;font-size:13px;vertical-align:middle}
+        .seg-or td:first-child{text-align:left}
+        .seg-or:hover td{background:#fafbfc}
+        .seg-r{text-align:right}
+        .seg-num{font-size:11px;font-weight:700;color:var(--gold);margin-right:5px}
+        .seg-pos{display:inline-block;padding:2px 7px;border-radius:99px;
+            font-size:11px;font-weight:600;background:#dcfce7;color:#16a34a;white-space:nowrap}
+        .seg-neg{display:inline-block;padding:2px 7px;border-radius:99px;
+            font-size:11px;font-weight:600;background:#fee2e2;color:#dc2626;white-space:nowrap}
+        .seg-bar-wrap{display:flex;align-items:center;gap:5px;justify-content:flex-end}
+        .seg-bar{height:5px;border-radius:3px;background:#e2e8f0;width:40px;overflow:hidden;flex-shrink:0}
+        .seg-bf{height:100%;border-radius:3px;background:var(--gold)}
+        .seg-bf-n{height:100%;border-radius:3px;background:#dc2626}
+        .seg-empty{text-align:center;padding:48px;color:var(--muted);font-size:14px}
+
         /* ══ TOAST ══ */
         #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
             background:#1e4080;color:#fff;padding:10px 20px;border-radius:20px;
@@ -258,6 +294,7 @@
 <div class="main-tabs" id="mainTabs" style="display:none">
     <button class="main-tab active" id="tabCal" onclick="setView('calendario')">📅 Calendario</button>
     <button class="main-tab" id="tabPlan" onclick="setView('planning')">📋 Planning</button>
+    <button class="main-tab" id="tabSeg" onclick="setView('seguimiento')">📊 Seguimiento</button>
 </div>
 
 <!-- Month nav -->
@@ -382,8 +419,11 @@ const LS_DATA='p1900v2_data', LS_FILE='p1900v2_file', LS_DATE='p1900v2_date';
 ══════════════════════════════════════ */
 let planData   = {};
 let planList   = [];
+let segData    = [];
 let activeTab  = 0;
 let activeView = 'calendario';
+let segSort    = 'resultado';
+let segQ       = '';
 let plSearch   = '';
 let plFiltroEstado = 'all';  // 'all'|'facturada'|'parafacturar'|'encurso'|'noiniciado'
 let plFiltroMes    = 'all';
@@ -415,14 +455,45 @@ function statusClass(e){
     return 'status-otro';
 }
 
+function parseSeguimiento(wb){
+    const wsName = wb.SheetNames.find(n=>n.toUpperCase().includes('SEGUIMIENTO'));
+    if(!wsName) return [];
+    const ws = wb.Sheets[wsName];
+    if(!ws||!ws['!ref']) return [];
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const enc = (r,c)=>XLSX.utils.encode_cell({r,c});
+    const num = (r,c)=>{ const cl=ws[enc(r,c)]; return cl&&cl.v!==undefined?Number(cl.v)||0:0; };
+    const str = (r,c)=>{ const cl=ws[enc(r,c)]; return cl?String(cl.v??'').trim():''; };
+    // Headers on row 2 (0-indexed), data from row 3
+    const clientes=[]; let current=null;
+    for(let r=range.s.r+3; r<=range.e.r; r++){
+        const colA=str(r,0), colC=str(r,2), colB=ws[enc(r,1)];
+        const isParent=colA&&!colC;
+        const isDetail=colC&&!colA;
+        if(isParent){
+            current={cliente:colA.replace('*','').trim(),presupuesto:num(r,3),facturado:num(r,4),gastos:num(r,5),resultado:num(r,6),margen:num(r,7),obras:[]};
+            clientes.push(current);
+        } else if(isDetail&&current){
+            const parts=colC.split(':',2);
+            const numObra=parts[0].trim();
+            const nombre=parts.length>1?parts[1].trim():colC;
+            const gastos=num(r,5), facturado=num(r,4);
+            if(facturado>0&&gastos>0){
+                current.obras.push({num:numObra,nombre,presupuesto:num(r,3),facturado,gastos,resultado:num(r,6),margen:num(r,7)});
+            }
+        }
+    }
+    return clientes;
+}
+
 function parseWb(wb){
     // Lee SOLO de la hoja PLANNING
     const calRes={};
     const listRes=[];
     const wsName = wb.SheetNames.find(n=>n.toUpperCase().includes('PLANNING'));
-    if(!wsName) return {calData:calRes, planList:listRes};
+    if(!wsName) return {calData:calRes, planList:listRes, segData:[]};
     const ws = wb.Sheets[wsName];
-    if(!ws||!ws['!ref']) return {calData:calRes, planList:listRes};
+    if(!ws||!ws['!ref']) return {calData:calRes, planList:listRes, segData:[]};
 
     // Leer hoja Flota: matricula -> nombre del vehiculo (filas 11-17, cols A-B, 0-indexado)
     const flotaMap={};
@@ -623,7 +694,7 @@ function parseWb(wb){
         if(ma!==mb) return ma-mb;
         return a.fechaMs-b.fechaMs;
     });
-    return {calData:calRes, planList:listRes};
+    return {calData:calRes, planList:listRes, segData:parseSeguimiento(wb)};
 }
 
 /* ══════════════════════════════════════
@@ -715,10 +786,81 @@ function setView(v){
     activeView=v;
     document.getElementById('tabCal').className='main-tab'+(v==='calendario'?' active':'');
     document.getElementById('tabPlan').className='main-tab'+(v==='planning'?' active':'');
+    document.getElementById('tabSeg').className='main-tab'+(v==='seguimiento'?' active':'');
     document.getElementById('monthNav').style.display=(v==='calendario'?'':'none');
-    if(v==='calendario') render();
+    if(v==='seguimiento') renderSeguimiento();
+    else if(v==='calendario') render();
     else renderPlanning();
 }
+
+function renderSeguimiento(){
+    const root=document.getElementById('root');
+    const fmtE=n=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+    const pctE=n=>(n*100).toFixed(1)+'%';
+    function bdg(v){
+        if(v>0) return `<span class="seg-pos">+${fmtE(v)}</span>`;
+        if(v<0) return `<span class="seg-neg">${fmtE(v)}</span>`;
+        return `<span style="color:var(--muted);font-size:12px">—</span>`;
+    }
+    function barHtml(m){
+        const p=Math.min(Math.abs(m)*100,100).toFixed(1);
+        const cls=m<0?'seg-bf-n':'seg-bf';
+        const col=m<0?'#dc2626':m>=0.5?'#16a34a':'var(--muted)';
+        return `<div class="seg-bar-wrap"><span style="font-size:12px;color:${col}">${pctE(m)}</span><div class="seg-bar"><div class="${cls}" style="width:${p}%"></div></div></div>`;
+    }
+    // Flatten obras
+    const OBRAS=[];
+    segData.forEach(c=>c.obras.forEach(o=>OBRAS.push({...o,cliente:c.cliente})));
+
+    function doRender(){
+        if(!OBRAS.length){
+            root.innerHTML=`<div class="seg-wrap"><div class="seg-empty">📊<br><br>Sube el Excel para ver el seguimiento</div></div>`;
+            return;
+        }
+        let list=segQ?OBRAS.filter(o=>o.cliente.toLowerCase().includes(segQ)||o.nombre.toLowerCase().includes(segQ)):[...OBRAS];
+        if(segSort==='cliente') list.sort((a,b)=>a.cliente.localeCompare(b.cliente,'es')||b.resultado-a.resultado);
+        else list.sort((a,b)=>b[segSort]-a[segSort]);
+
+        const groups={},order=[];
+        list.forEach(o=>{if(!groups[o.cliente]){groups[o.cliente]=[];order.push(o.cliente);}groups[o.cliente].push(o);});
+
+        let rows='';
+        order.forEach(cli=>{
+            rows+=`<tr class="seg-gh"><td colspan="6">${cli}</td></tr>`;
+            groups[cli].forEach(o=>{
+                rows+=`<tr class="seg-or">
+                  <td><span class="seg-num">#${o.num}</span>${o.nombre}</td>
+                  <td class="seg-r" style="font-size:12px;color:var(--muted)">${o.presupuesto?fmtE(o.presupuesto):'—'}</td>
+                  <td class="seg-r" style="font-weight:600">${fmtE(o.facturado)}</td>
+                  <td class="seg-r" style="font-size:12px;color:var(--muted)">${fmtE(o.gastos)}</td>
+                  <td class="seg-r">${bdg(o.resultado)}</td>
+                  <td class="seg-r">${barHtml(o.margen)}</td>
+                </tr>`;
+            });
+        });
+        const nCli=new Set(list.map(o=>o.cliente)).size;
+        root.innerHTML=`<div class="seg-wrap">
+          <div class="seg-controls">
+            <input class="seg-search" id="segQ" type="search" placeholder="Buscar cliente u obra…" value="${segQ}">
+            <button class="seg-sort${segSort==='resultado'?' on':''}" onclick="setSegSort('resultado')">↓ Resultado</button>
+            <button class="seg-sort${segSort==='margen'?' on':''}" onclick="setSegSort('margen')">↓ Margen</button>
+            <button class="seg-sort${segSort==='facturado'?' on':''}" onclick="setSegSort('facturado')">↓ Facturado</button>
+            <button class="seg-sort${segSort==='cliente'?' on':''}" onclick="setSegSort('cliente')">A–Z</button>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${list.length} obras · ${nCli} clientes</div>
+          <div class="seg-table-wrap"><table class="seg-table">
+            <thead><tr>
+              <th>Obra</th><th class="seg-r">Presupuesto</th><th class="seg-r">Facturado</th>
+              <th class="seg-r">Gastos</th><th class="seg-r">Resultado</th><th class="seg-r">Margen</th>
+            </tr></thead>
+            <tbody>${rows||`<tr><td colspan="6" class="seg-empty">Sin resultados</td></tr>`}</tbody>
+          </table></div>
+        </div>`;
+        document.getElementById('segQ').addEventListener('input',e=>{segQ=e.target.value.trim().toLowerCase();doRender();});
+    }
+    doRender();
+}
+window.setSegSort=function(k){segSort=k;renderSeguimiento();};
 
 function fmtFecha(iso){
     if(!iso||!iso.match(/^\d{4}-\d{2}-\d{2}$/)) return iso||'';
@@ -989,6 +1131,8 @@ function onFile(evt){
 
             planData=parsed.calData;
             planList=parsed.planList;
+            segData=parsed.segData||[];
+            localStorage.setItem('p1900_segdata',JSON.stringify(segData));
             rebuildTabs();
             const ahora=new Date().toLocaleString('es-ES',
                 {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -1004,7 +1148,8 @@ function onFile(evt){
 
             setStatus(true,`Planning de Excel · ${ahora}`);
             activeTab=tabActual();
-            if(activeView==='planning') renderPlanning();
+            if(activeView==='seguimiento') renderSeguimiento();
+            else if(activeView==='planning') renderPlanning();
             else render();
             toast(`✓ ${total} entradas cargadas — sincronizando…`);
         }catch(err){
@@ -1118,6 +1263,8 @@ async function cargarDatos(){
             planData=JSON.parse(d);
             const pl=localStorage.getItem('p1900v2_planlist');
             if(pl) planList=JSON.parse(pl);
+            const sg=localStorage.getItem('p1900_segdata');
+            if(sg) segData=JSON.parse(sg);
             rebuildTabs();
             setStatus(true,`Planning de Excel · ${dt||''}`);
             activeTab=tabActual();
