@@ -823,13 +823,13 @@ function openDay(tabIdx,day){
     const fecha =new Date(tab.year||YEAR,tab.mesIdx,day);
     const cards =obras.map(o=>`
         <div class="obra-card">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
                 ${o.nObra?`<span class="pl-obra-num">#${esc(o.nObra)}</span>`:''}
                 <span class="obra-card-title" style="margin:0;flex:1">${esc(o.obra||'—')}</span>
-                ${o.estado?`<span class="status-badge ${statusClass(o.estado)}">${esc(o.estado)}</span>`:''}
                 ${o.esInicio?`<span class="pl-fin-badge" style="background:#e0f2fe;color:#0369a1;border-color:#7dd3fc">INICIO</span>`:''}
                 ${o.esFin?`<span class="pl-fin-badge">FIN</span>`:''}
             </div>
+            ${o.estado?`<div style="margin-bottom:8px"><span class="status-badge ${statusClass(o.estado)}" style="white-space:normal;display:inline-block">${esc(o.estado)}</span></div>`:''}
             ${o.cliente?`<div class="obra-field">
                 <div class="obra-field-icon">👤</div>
                 <div class="obra-field-body">
