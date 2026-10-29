@@ -314,13 +314,14 @@ function ocultarApp(){
 }
 
 netlifyIdentity.on('init', user => {
-    netlifyIdentity.close(); // evitar que el widget abra popup automático
-    if(user){ mostrarApp(); }
+    netlifyIdentity.close();
+    if(user){ mostrarApp(); cargarDatos(); }
     else { ocultarApp(); }
 });
 netlifyIdentity.on('login', user => {
     mostrarApp();
     netlifyIdentity.close();
+    cargarDatos();
 });
 netlifyIdentity.on('logout', () => { ocultarApp(); });
 
@@ -1061,10 +1062,10 @@ function tabActual(){
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 /* ══════════════════════════════════════
-   INIT — primero servidor, luego local
+   INIT — carga datos tras autenticación
 ══════════════════════════════════════ */
-(async function(){
-    // 1. Intentar cargar desde servidor (datos compartidos entre dispositivos)
+async function cargarDatos(){
+    // 1. Servidor (usuario autenticado, datos actualizados)
     const servidor = await cargarDesdeServidor();
     if(servidor && servidor.data && Object.keys(servidor.data).length){
         planData = servidor.data;
@@ -1080,7 +1081,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
         return;
     }
 
-    // 2. Fallback: localStorage (sin conexión o primer uso)
+    // 2. Fallback: localStorage (sin conexión)
     const d=localStorage.getItem(LS_DATA);
     const dt=localStorage.getItem(LS_DATE);
     if(d){
@@ -1097,7 +1098,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 
     // 3. Sin datos
     mostrarVacio();
-})();
+}
 
 // Auto-refresco cada 5 minutos: si hay datos nuevos en el servidor, actualiza la vista
 setInterval(async () => {
