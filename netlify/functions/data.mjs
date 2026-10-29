@@ -7,9 +7,17 @@ const headers = {
     "Content-Type": "application/json"
 };
 
-function isAuthenticated(context) {
-    // Netlify Identity popula context.clientContext.user si el JWT es válido
-    return !!(context.clientContext && context.clientContext.user);
+function isAuthenticated(context, req) {
+    // Método 1: context automático de Netlify Identity
+    if (context.clientContext && context.clientContext.user) return true;
+    // Método 2: verificar JWT del header manualmente
+    const auth = req.headers.get('authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '');
+    if (!token) return false;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return !!(payload.sub && payload.exp && payload.exp * 1000 > Date.now());
+    } catch { return false; }
 }
 
 export default async (req, context) => {
@@ -17,7 +25,7 @@ export default async (req, context) => {
         return new Response("", { status: 200, headers });
     }
 
-    if (!isAuthenticated(context)) {
+    if (!isAuthenticated(context, req)) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 
