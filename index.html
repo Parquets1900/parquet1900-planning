@@ -909,12 +909,22 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
 ══════════════════════════════════════ */
 async function guardarEnServidor(data, filename, fecha, list=[]) {
     try {
-        await fetch('/api/data', {
+        const res = await fetch('/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
             body: JSON.stringify({ data, filename, fecha, planList: list })
         });
-    } catch { /* sin conexión, continuar */ }
+        if (!res.ok) {
+            const err = await res.text();
+            console.error('Error guardando en servidor:', res.status, err);
+            toast(`⚠ Error al guardar en servidor (${res.status}) — los compañeros no verán los cambios`);
+        } else {
+            console.log('✅ Guardado en servidor correctamente');
+        }
+    } catch(e) {
+        console.error('Error de red:', e);
+        toast('⚠ Sin conexión — datos solo guardados localmente');
+    }
 }
 
 async function authHeaders(){
@@ -931,9 +941,13 @@ async function authHeaders(){
 async function cargarDesdeServidor() {
     try {
         const res = await fetch('/api/data', {headers: await authHeaders()});
-        if (!res.ok) return null;
+        if (!res.ok) {
+            console.error('Error cargando del servidor:', res.status, await res.text());
+            return null;
+        }
         return await res.json();
-    } catch {
+    } catch(e) {
+        console.error('Error de red cargando datos:', e);
         return null;
     }
 }
