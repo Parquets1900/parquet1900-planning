@@ -1099,6 +1099,26 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     mostrarVacio();
 })();
 
+// Auto-refresco cada 5 minutos: si hay datos nuevos en el servidor, actualiza la vista
+setInterval(async () => {
+    if (!netlifyIdentity.currentUser()) return;
+    const servidor = await cargarDesdeServidor();
+    if (!servidor || !servidor.fecha) return;
+    const fechaActual = localStorage.getItem(LS_DATE) || '';
+    if (servidor.fecha !== fechaActual) {
+        planData = servidor.data;
+        planList = servidor.planList || [];
+        rebuildTabs();
+        localStorage.setItem(LS_DATA, JSON.stringify(planData));
+        localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
+        localStorage.setItem(LS_FILE, servidor.filename || '');
+        localStorage.setItem(LS_DATE, servidor.fecha);
+        setStatus(true, `Planning actualizado · ${servidor.fecha}`);
+        activeTab = tabActual();
+        render();
+    }
+}, 5 * 60 * 1000);
+
 </script>
 </body>
 </html>
