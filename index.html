@@ -814,7 +814,7 @@ function renderSeguimiento(){
 
     function doRender(){
         if(!OBRAS.length){
-            root.innerHTML=`<div class="seg-wrap"><div class="seg-empty">📊<br><br>Sube el Excel para ver el seguimiento</div></div>`;
+            root.innerHTML=`<div class="seg-wrap"><div class="seg-empty">📊<br><br>Sube el Excel para ver el seguimiento<br><small style="font-size:10px;color:#aaa">segData:${segData.length} clientes</small></div></div>`;
             return;
         }
         let list=segQ?OBRAS.filter(o=>o.cliente.toLowerCase().includes(segQ)||o.nombre.toLowerCase().includes(segQ)):[...OBRAS];
@@ -1245,6 +1245,7 @@ async function cargarDatos(){
         planData = servidor.data;
         planList = servidor.planList || [];
         segData = servidor.segData || [];
+        console.log('🔄 Servidor: segData clientes=', segData.length, 'obras=', segData.reduce((s,c)=>s+c.obras.length,0));
         rebuildTabs();
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
         localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
