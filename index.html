@@ -1060,12 +1060,12 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
 /* ══════════════════════════════════════
    SYNC CON SERVIDOR
 ══════════════════════════════════════ */
-async function guardarEnServidor(data, filename, fecha, list=[]) {
+async function guardarEnServidor(data, filename, fecha, list=[], seg=[]) {
     try {
         const res = await fetch('/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-            body: JSON.stringify({ data, filename, fecha, planList: list })
+            body: JSON.stringify({ data, filename, fecha, planList: list, segData: seg })
         });
         if (!res.ok) {
             const err = await res.text();
@@ -1142,7 +1142,7 @@ function onFile(evt){
             localStorage.setItem('p1900v2_planlist',JSON.stringify(planList));
             localStorage.setItem(LS_FILE,file.name);
             localStorage.setItem(LS_DATE,ahora);
-            guardarEnServidor(planData, file.name, ahora, planList).then(()=>{
+            guardarEnServidor(planData, file.name, ahora, planList, segData).then(()=>{
                 toast(`✓ Datos guardados y sincronizados en todos los dispositivos`);
             });
 
@@ -1244,9 +1244,11 @@ async function cargarDatos(){
     if(servidor && servidor.data && Object.keys(servidor.data).length){
         planData = servidor.data;
         planList = servidor.planList || [];
+        segData = servidor.segData || [];
         rebuildTabs();
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
         localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
+        localStorage.setItem('p1900_segdata', JSON.stringify(segData));
         localStorage.setItem(LS_FILE, servidor.filename || '');
         localStorage.setItem(LS_DATE, servidor.fecha || '');
         setStatus(true, `Planning de Excel · ${servidor.fecha || ''}`);
@@ -1285,9 +1287,11 @@ setInterval(async () => {
     if (servidor.fecha !== fechaActual) {
         planData = servidor.data;
         planList = servidor.planList || [];
+        segData = servidor.segData || [];
         rebuildTabs();
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
         localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
+        localStorage.setItem('p1900_segdata', JSON.stringify(segData));
         localStorage.setItem(LS_FILE, servidor.filename || '');
         localStorage.setItem(LS_DATE, servidor.fecha);
         setStatus(true, `Planning actualizado · ${servidor.fecha}`);
