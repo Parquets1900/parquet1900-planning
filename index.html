@@ -245,6 +245,7 @@
         </div>
         <div class="hdr-actions">
             <button class="hdr-btn" onclick="document.getElementById('fileIn').click()" title="Subir Excel">＋</button>
+            <button class="hdr-btn" onclick="netlifyIdentity.logout()" title="Cerrar sesión" style="font-size:13px">↪</button>
         </div>
     </div>
     <div class="status-bar" id="statusBar">
@@ -275,22 +276,32 @@
 </div>
 
 <!-- Pantalla de login (visible hasta autenticarse) -->
-<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--blue);z-index:50;
-    flex-direction:column;align-items:center;justify-content:center;gap:24px">
-    <div style="text-align:center">
-        <div style="width:72px;height:72px;border-radius:18px;background:rgba(255,255,255,.15);
-            display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-            <img src="logo.png" style="width:60px;height:60px;object-fit:contain" onerror="this.style.display='none'">
+<div id="loginScreen" style="display:none;position:fixed;inset:0;z-index:50;
+    flex-direction:column;align-items:center;justify-content:center;gap:0;
+    background:var(--blue)">
+    <div style="position:absolute;inset:0;pointer-events:none;
+        background:radial-gradient(ellipse 70% 50% at 50% 0%,rgba(201,168,76,.18) 0%,transparent 70%),
+        radial-gradient(ellipse 40% 40% at 80% 85%,rgba(201,168,76,.10) 0%,transparent 60%)"></div>
+    <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:24px;
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:24px;
+        padding:44px 40px 40px;width:calc(100% - 48px);max-width:340px;
+        backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+        box-shadow:0 8px 48px rgba(0,0,0,.4)">
+        <div style="text-align:center">
+            <img src="logo.png" style="width:160px;height:160px;object-fit:contain;
+                filter:drop-shadow(0 4px 16px rgba(0,0,0,.3))" onerror="this.style.display='none'">
+            <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,.45);
+                letter-spacing:.12em;text-transform:uppercase;margin-top:6px">Planning</div>
         </div>
-        <div style="font-size:22px;font-weight:800;color:#fff">Parquet 1900</div>
-        <div style="font-size:13px;color:rgba(255,255,255,.6);margin-top:4px">Planning</div>
-    </div>
-    <button id="loginBtn" style="padding:14px 32px;border-radius:12px;border:none;
-        background:#fff;color:var(--blue);font-size:16px;font-weight:700;cursor:pointer">
-        Iniciar sesión
-    </button>
-    <div id="loginErr" style="color:#fca5a5;font-size:13px;display:none">
-        Acceso denegado. Contacta con el administrador.
+        <div style="width:40px;height:1px;background:rgba(201,168,76,.4);border-radius:1px"></div>
+        <button id="loginBtn" style="width:100%;padding:15px 32px;border-radius:12px;border:none;
+            background:#fff;color:var(--blue);font-size:15px;font-weight:700;cursor:pointer;
+            letter-spacing:.02em">
+            Iniciar sesión
+        </button>
+        <div id="loginErr" style="color:#fca5a5;font-size:12px;display:none;text-align:center">
+            Acceso denegado. Contacta con el administrador.
+        </div>
     </div>
 </div>
 
