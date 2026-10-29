@@ -3,13 +3,22 @@ import { getStore } from "@netlify/blobs";
 const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Content-Type": "application/json"
 };
+
+function isAuthenticated(context) {
+    // Netlify Identity popula context.clientContext.user si el JWT es válido
+    return !!(context.clientContext && context.clientContext.user);
+}
 
 export default async (req, context) => {
     if (req.method === "OPTIONS") {
         return new Response("", { status: 200, headers });
+    }
+
+    if (!isAuthenticated(context)) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
     }
 
     try {

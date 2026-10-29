@@ -10,6 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="P1900">
     <meta name="theme-color" content="#1e4080">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <style>
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         :root{
@@ -273,11 +274,65 @@
     <div class="month-pills" id="monthPills"></div>
 </div>
 
+<!-- Pantalla de login (visible hasta autenticarse) -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--blue);z-index:9999;
+    flex-direction:column;align-items:center;justify-content:center;gap:24px">
+    <div style="text-align:center">
+        <div style="width:72px;height:72px;border-radius:18px;background:rgba(255,255,255,.15);
+            display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+            <img src="logo.png" style="width:60px;height:60px;object-fit:contain" onerror="this.style.display='none'">
+        </div>
+        <div style="font-size:22px;font-weight:800;color:#fff">Parquet 1900</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.6);margin-top:4px">Planning</div>
+    </div>
+    <button id="loginBtn" style="padding:14px 32px;border-radius:12px;border:none;
+        background:#fff;color:var(--blue);font-size:16px;font-weight:700;cursor:pointer">
+        Iniciar sesión
+    </button>
+    <div id="loginErr" style="color:#fca5a5;font-size:13px;display:none">
+        Acceso denegado. Contacta con el administrador.
+    </div>
+</div>
+
 <div id="root"></div>
 <div id="toast"></div>
 <input id="fileIn" type="file" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="onFile(event)">
 
 <script>
+/* ══════════════════════════════════════
+   AUTH — Netlify Identity
+══════════════════════════════════════ */
+function mostrarApp(){
+    document.getElementById('loginScreen').style.display='none';
+    document.querySelector('.app-header').style.visibility='visible';
+    document.getElementById('monthNav').style.visibility='visible';
+}
+function ocultarApp(){
+    document.getElementById('loginScreen').style.display='flex';
+    document.querySelector('.app-header').style.visibility='hidden';
+    document.getElementById('monthNav').style.visibility='hidden';
+}
+
+netlifyIdentity.on('init', user => {
+    if(user){ mostrarApp(); }
+    else { ocultarApp(); }
+});
+netlifyIdentity.on('login', user => {
+    mostrarApp();
+    netlifyIdentity.close();
+});
+netlifyIdentity.on('logout', () => { ocultarApp(); });
+
+document.addEventListener('DOMContentLoaded', ()=>{
+    document.getElementById('loginBtn').addEventListener('click', ()=>{
+        netlifyIdentity.open('login');
+    });
+    // Ocultar app hasta verificar sesión
+    document.querySelector('.app-header').style.visibility='hidden';
+    document.getElementById('monthNav').style.visibility='hidden';
+    document.getElementById('loginScreen').style.display='flex';
+});
+
 /* ══════════════════════════════════════
    CONFIG
 ══════════════════════════════════════ */
@@ -852,15 +907,22 @@ async function guardarEnServidor(data, filename, fecha, list=[]) {
     try {
         await fetch('/api/data', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
             body: JSON.stringify({ data, filename, fecha, planList: list })
         });
     } catch { /* sin conexión, continuar */ }
 }
 
+function authHeaders(){
+    const user = netlifyIdentity.currentUser();
+    if(!user) return {};
+    const token = user.token && user.token.access_token;
+    return token ? {'Authorization': `Bearer ${token}`} : {};
+}
+
 async function cargarDesdeServidor() {
     try {
-        const res = await fetch('/api/data');
+        const res = await fetch('/api/data', {headers: authHeaders()});
         if (!res.ok) return null;
         return await res.json();
     } catch {
