@@ -826,8 +826,21 @@ function renderSeguimiento(){
 
         let rows='';
         order.forEach(cli=>{
-            rows+=`<tr class="seg-gh"><td colspan="6">${cli}</td></tr>`;
-            groups[cli].forEach(o=>{
+            const obras=groups[cli];
+            const tFact=obras.reduce((s,o)=>s+o.facturado,0);
+            const tGast=obras.reduce((s,o)=>s+o.gastos,0);
+            const tRes=obras.reduce((s,o)=>s+o.resultado,0);
+            const tMarg=tFact>0?tRes/tFact:0;
+            const resColor=tRes>0?'#16a34a':tRes<0?'#dc2626':'var(--muted)';
+            rows+=`<tr class="seg-gh">
+              <td>${cli}</td>
+              <td></td>
+              <td class="seg-r" style="font-size:11px;font-weight:600;color:rgba(255,255,255,.7)">${fmtE(tFact)}</td>
+              <td class="seg-r" style="font-size:11px;color:rgba(255,255,255,.5)">${fmtE(tGast)}</td>
+              <td class="seg-r" style="font-size:11px;font-weight:700;color:${tRes>0?'#86efac':tRes<0?'#fca5a5':'rgba(255,255,255,.5)'}">${tRes>0?'+':''}${fmtE(tRes)}</td>
+              <td class="seg-r" style="font-size:11px;color:rgba(255,255,255,.6)">${pctE(tMarg)}</td>
+            </tr>`;
+            obras.forEach(o=>{
                 rows+=`<tr class="seg-or">
                   <td><span class="seg-num">#${o.num}</span>${o.nombre}</td>
                   <td class="seg-r" style="font-size:12px;color:var(--muted)">${o.presupuesto?fmtE(o.presupuesto):'—'}</td>
