@@ -242,6 +242,8 @@
         .seg-table tbody tr:last-child{border-bottom:none}
         .seg-gh td{background:#eef2f8;padding:7px 12px 5px;font-size:11px;
             font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;border-bottom:none}
+        .seg-sub td{background:#f8f9fb;padding:7px 11px;font-size:12px;font-weight:700;border-top:2px solid #e2e8f0;border-bottom:1px solid var(--border)}
+        .seg-sub td:first-child{color:var(--muted);font-size:11px;text-align:left}
         .seg-or td{padding:9px 11px;font-size:13px;vertical-align:middle}
         .seg-or td:first-child{text-align:left}
         .seg-or:hover td{background:#fafbfc}
@@ -831,15 +833,8 @@ function renderSeguimiento(){
             const tGast=obras.reduce((s,o)=>s+o.gastos,0);
             const tRes=obras.reduce((s,o)=>s+o.resultado,0);
             const tMarg=tFact>0?tRes/tFact:0;
-            const resColor=tRes>0?'#16a34a':tRes<0?'#dc2626':'var(--muted)';
-            rows+=`<tr class="seg-gh">
-              <td>${cli}</td>
-              <td></td>
-              <td class="seg-r" style="font-size:11px;font-weight:600;color:rgba(255,255,255,.7)">${fmtE(tFact)}</td>
-              <td class="seg-r" style="font-size:11px;color:rgba(255,255,255,.5)">${fmtE(tGast)}</td>
-              <td class="seg-r" style="font-size:11px;font-weight:700;color:${tRes>0?'#86efac':tRes<0?'#fca5a5':'rgba(255,255,255,.5)'}">${tRes>0?'+':''}${fmtE(tRes)}</td>
-              <td class="seg-r" style="font-size:11px;color:rgba(255,255,255,.6)">${pctE(tMarg)}</td>
-            </tr>`;
+            const resCol=tRes>0?'#16a34a':tRes<0?'#dc2626':'var(--muted)';
+            rows+=`<tr class="seg-gh"><td colspan="6">${cli}</td></tr>`;
             obras.forEach(o=>{
                 rows+=`<tr class="seg-or">
                   <td><span class="seg-num">#${o.num}</span>${o.nombre}</td>
@@ -850,6 +845,16 @@ function renderSeguimiento(){
                   <td class="seg-r">${barHtml(o.margen)}</td>
                 </tr>`;
             });
+            if(obras.length>1){
+                rows+=`<tr class="seg-sub">
+                  <td>Total ${cli}</td>
+                  <td></td>
+                  <td class="seg-r">${fmtE(tFact)}</td>
+                  <td class="seg-r" style="color:var(--muted)">${fmtE(tGast)}</td>
+                  <td class="seg-r" style="color:${resCol}">${tRes>0?'+':''}${fmtE(tRes)}</td>
+                  <td class="seg-r" style="color:${resCol}">${pctE(tMarg)}</td>
+                </tr>`;
+            }
         });
         const nCli=new Set(list.map(o=>o.cliente)).size;
         root.innerHTML=`<div class="seg-wrap">
