@@ -814,18 +814,12 @@ function renderSeguimiento(){
     const OBRAS=[];
     segData.forEach(c=>c.obras.forEach(o=>OBRAS.push({...o,cliente:c.cliente})));
 
-    function doRender(){
-        if(!OBRAS.length){
-            root.innerHTML=`<div class="seg-wrap"><div class="seg-empty">📊<br><br>Sube el Excel para ver el seguimiento<br><small style="font-size:10px;color:#aaa">segData:${segData.length} clientes</small></div></div>`;
-            return;
-        }
+    function buildRows(){
         let list=segQ?OBRAS.filter(o=>o.cliente.toLowerCase().includes(segQ)||o.nombre.toLowerCase().includes(segQ)):[...OBRAS];
         if(segSort==='cliente') list.sort((a,b)=>a.cliente.localeCompare(b.cliente,'es')||b.resultado-a.resultado);
         else list.sort((a,b)=>b[segSort]-a[segSort]);
-
         const groups={},order=[];
         list.forEach(o=>{if(!groups[o.cliente]){groups[o.cliente]=[];order.push(o.cliente);}groups[o.cliente].push(o);});
-
         let rows='';
         order.forEach(cli=>{
             const obras=groups[cli];
@@ -847,8 +841,7 @@ function renderSeguimiento(){
             });
             if(obras.length>1){
                 rows+=`<tr class="seg-sub">
-                  <td>Total ${cli}</td>
-                  <td></td>
+                  <td>Total ${cli}</td><td></td>
                   <td class="seg-r">${fmtE(tFact)}</td>
                   <td class="seg-r" style="color:var(--muted)">${fmtE(tGast)}</td>
                   <td class="seg-r" style="color:${resCol}">${tRes>0?'+':''}${fmtE(tRes)}</td>
@@ -856,22 +849,42 @@ function renderSeguimiento(){
                 </tr>`;
             }
         });
-        const nCli=new Set(list.map(o=>o.cliente)).size;
+        return {rows:rows||`<tr><td colspan="6" class="seg-empty">Sin resultados</td></tr>`, nObras:list.length, nCli:new Set(list.map(o=>o.cliente)).size};
+    }
+
+    function doRender(){
+        if(!OBRAS.length){
+            root.innerHTML=`<div class="seg-wrap"><div class="seg-empty">📊<br><br>Sube el Excel para ver el seguimiento<br><small style="font-size:10px;color:#aaa">segData:${segData.length} clientes</small></div></div>`;
+            return;
+        }
+        // Si el contenedor ya existe, solo actualizamos tbody y contador (preserva el foco del input)
+        const tbody=document.getElementById('segTbody');
+        if(tbody){
+            const {rows,nObras,nCli}=buildRows();
+            tbody.innerHTML=rows;
+            const ctr=document.getElementById('segCtr');
+            if(ctr) ctr.textContent=`${nObras} obras · ${nCli} clientes`;
+            // Actualizar botones de orden
+            document.querySelectorAll('.seg-sort').forEach(b=>b.classList.toggle('on',b.dataset.sort===segSort));
+            return;
+        }
+        // Primer render: construir toda la estructura
+        const {rows,nObras,nCli}=buildRows();
         root.innerHTML=`<div class="seg-wrap">
           <div class="seg-controls">
             <input class="seg-search" id="segQ" type="search" placeholder="Buscar cliente u obra…" value="${segQ}">
-            <button class="seg-sort${segSort==='resultado'?' on':''}" onclick="setSegSort('resultado')">↓ Resultado</button>
-            <button class="seg-sort${segSort==='margen'?' on':''}" onclick="setSegSort('margen')">↓ Margen</button>
-            <button class="seg-sort${segSort==='facturado'?' on':''}" onclick="setSegSort('facturado')">↓ Facturado</button>
-            <button class="seg-sort${segSort==='cliente'?' on':''}" onclick="setSegSort('cliente')">A–Z</button>
+            <button class="seg-sort${segSort==='resultado'?' on':''}" data-sort="resultado" onclick="setSegSort('resultado')">↓ Resultado</button>
+            <button class="seg-sort${segSort==='margen'?' on':''}" data-sort="margen" onclick="setSegSort('margen')">↓ Margen</button>
+            <button class="seg-sort${segSort==='facturado'?' on':''}" data-sort="facturado" onclick="setSegSort('facturado')">↓ Facturado</button>
+            <button class="seg-sort${segSort==='cliente'?' on':''}" data-sort="cliente" onclick="setSegSort('cliente')">A–Z</button>
           </div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${list.length} obras · ${nCli} clientes</div>
+          <div id="segCtr" style="font-size:12px;color:var(--muted);margin-bottom:10px">${nObras} obras · ${nCli} clientes</div>
           <div class="seg-table-wrap"><table class="seg-table">
             <thead><tr>
               <th>Obra</th><th class="seg-r">Presupuesto</th><th class="seg-r">Facturado</th>
               <th class="seg-r">Gastos</th><th class="seg-r">Resultado</th><th class="seg-r">Margen</th>
             </tr></thead>
-            <tbody>${rows||`<tr><td colspan="6" class="seg-empty">Sin resultados</td></tr>`}</tbody>
+            <tbody id="segTbody">${rows}</tbody>
           </table></div>
         </div>`;
         document.getElementById('segQ').addEventListener('input',e=>{segQ=e.target.value.trim().toLowerCase();doRender();});
