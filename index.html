@@ -815,7 +815,7 @@ function renderSeguimiento(){
     segData.forEach(c=>c.obras.forEach(o=>OBRAS.push({...o,cliente:c.cliente})));
 
     function buildRows(){
-        let list=segQ?OBRAS.filter(o=>o.cliente.toLowerCase().includes(segQ)||o.nombre.toLowerCase().includes(segQ)):[...OBRAS];
+        let list=segQ?OBRAS.filter(o=>o.cliente.toLowerCase().includes(segQ)||o.nombre.toLowerCase().includes(segQ)||o.num.includes(segQ)):[...OBRAS];
         if(segSort==='cliente') list.sort((a,b)=>a.cliente.localeCompare(b.cliente,'es')||b.resultado-a.resultado);
         else list.sort((a,b)=>b[segSort]-a[segSort]);
         const groups={},order=[];
