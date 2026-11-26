@@ -37,13 +37,27 @@ export default async (req, context) => {
         });
 
         if (req.method === "GET") {
-            const data = await store.get("plandata", { type: "json" });
-            return new Response(JSON.stringify(data || null), { status: 200, headers });
+            // Cargar planning y segdata por separado para que sean independientes
+            const [planRaw, segRaw] = await Promise.all([
+                store.get("plandata", { type: "json" }),
+                store.get("segdata", { type: "json" })
+            ]);
+            if (!planRaw) return new Response(JSON.stringify(null), { status: 200, headers });
+            // segData puede venir del blob propio o del campo legacy dentro de plandata
+            const segData = segRaw ?? planRaw.segData ?? [];
+            const result = { ...planRaw, segData };
+            return new Response(JSON.stringify(result), { status: 200, headers });
         }
 
         if (req.method === "POST") {
             const body = await req.json();
-            await store.set("plandata", JSON.stringify(body));
+            const { segData, ...planBody } = body;
+            // Guardar planning y segdata por separado
+            const saves = [store.set("plandata", JSON.stringify(planBody))];
+            if (segData && segData.length > 0) {
+                saves.push(store.set("segdata", JSON.stringify(segData)));
+            }
+            await Promise.all(saves);
             return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
         }
     } catch (e) {

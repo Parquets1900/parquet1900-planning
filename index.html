@@ -1275,8 +1275,22 @@ async function cargarDatos(){
     if(servidor && servidor.data && Object.keys(servidor.data).length){
         planData = servidor.data;
         planList = servidor.planList || [];
-        segData = servidor.segData || [];
-        console.log('🔄 Servidor: segData clientes=', segData.length, 'obras=', segData.reduce((s,c)=>s+c.obras.length,0));
+        // Si el servidor no tiene segData, usar localStorage como fallback y reparar servidor
+        const srvSeg = servidor.segData || [];
+        if(srvSeg.length > 0){
+            segData = srvSeg;
+        } else {
+            const lsSeg = localStorage.getItem('p1900_segdata');
+            segData = lsSeg ? (JSON.parse(lsSeg) || []) : [];
+            // Auto-reparar: subir segData al servidor si lo tenemos localmente
+            if(segData.length > 0){
+                fetch('/api/data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+                    body: JSON.stringify({ data: planData, filename: servidor.filename, fecha: servidor.fecha, planList, segData })
+                }).catch(()=>{});
+            }
+        }
         rebuildTabs();
         localStorage.setItem(LS_DATA, JSON.stringify(planData));
         localStorage.setItem('p1900v2_planlist', JSON.stringify(planList));
